@@ -89,6 +89,25 @@ if (DType =="AMX") {
   YukiDF$Bedrag<-as.numeric(gsub(",",".",AmexRaw$Bedrag))*-1
   YukiDF$Naam_tegenrekening[which(AmexRaw$Omschrijving=="HARTELIJK BEDANKT VOOR UW BETALING")]<-"American Express"
   aggregate.data.frame(YukiDF$Bedrag, list( substr(YukiDF$Omschrijving,1,2)) ,sum)
+  # ==== Additional Records created for Commission charged by AMEX ====
+  # Disadvatage is original amount on statement cannot be found
+  FeeRecords<-length(grep("Commission Amount:",AmexRaw$Aanvullende.informatie)) #number of records containing a Fee (transaction cost)
+  if (FeeRecords>0) {
+    message("Fee")
+    FeeDF<-CreateFeeDF(FeeRecords)
+    FeeDF$IBAN<-YukiDF$IBAN[1]
+    FeeDF$Valuta <-YukiDF$Valuta[1]
+    FeeDF$Naam_tegenrekening<-"American Express"
+    FeeDF$Datum<-YukiDF$Datum[grep("Commission Amount:",AmexRaw$Aanvullende.informatie)]
+    FeeDF$Rentedatum<-FeeDF$Datum
+    FeeDF$Afschrift<-YukiDF$Afschrift[grep("Commission Amount:",AmexRaw$Aanvullende.informatie)] #number of records containing a Fee (transaction cost)
+    FeeDF$Omschrijving<-paste("[FEE:]",YukiDF$Omschrijving[grep("Commission Amount:",AmexRaw$Aanvullende.informatie)])
+    FeeList<-unlist(strsplit(FeeDF$Omschrijving," "))
+    FeeDF$Bedrag<--as.numeric(FeeList[which(tmp=="Commission")+2])
+    YukiDF$Bedrag[grep("Commission Amount:",AmexRaw$Aanvullende.informatie)]<-YukiDF$Bedrag[grep("Commission Amount:",AmexRaw$Aanvullende.informatie)]-FeeDF$Bedrag
+    View(FeeDF)
+    YukiDF<-rbind(YukiDF,FeeDF)
+   }
 }
 if (DType =="BNP") {
   #BNPRaw<-read.table(ifile, header= TRUE, sep = ";", quote = "", dec = ",",stringsAsFactors = FALSE)
