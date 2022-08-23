@@ -1,15 +1,14 @@
 # This program converts convert statements from AMEX or BNP to format to import in
 # accounting system CSV provided by AMEX/BNP is converted to CSV
-# ===== Define Functions =====
+# ===== Define Functions ===== 23 aug
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
   header<-readLines(x,skip=0, n = 1)
-  NrOfColumns<-length(strsplit(header,c(",",";"))[[1]]) #splits header in velden door seperator , of ;
-  
+  NrOfColumns<-length(strsplit(header,"[;,]")[[1]]) #splits header in velden door seperator , of ;
   if ( length(grep("Product",header))!= 0) { DocType<-"REV"} # soms zit er een extra kolom bij categorie
   if ( length(grep("Kaartlid",header))!= 0) { DocType<-"AMX"} # soms zit er een extra kolom bij categorie
   if ( length(grep("Uitvoeringsdatum",header)) != 0) { DocType<-"BNP"} # door de ; wordt deze ingelezen als 1 kolom
-  message("Aantal kolommen: ", NrOfColumns, "\nDocType:",DocType)
+  message("Nr Columns source: ", NrOfColumns, "\nDocType:",DocType)
   return(DocType)
 }
 CreateYukiDF <-function(x) {
@@ -131,8 +130,8 @@ if (DType =="BNP") {
   YukiDF$Bedrag<-BNPRaw$Bedrag
   YukiDF$Tegenrekening<-""
   YukiDF$Tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Tegenpartij[grep("BIC",BNPRaw$Details)]
-  # split string in losse woorden en selecteer 6e woord als tegenpartij voor alle BETALING MET DEBETKAART
-  YukiDF$Naam_tegenrekening[grep("BETALING MET DEBETKAART", BNPRaw$Tegenpartij)]<-sapply(strsplit(BNPRaw$Details[grep("BETALING MET DEBETKAART", BNPRaw$Tegenpartij)]," "),'[',6)
+  # split string in losse woorden en selecteer 9e woord als tegenpartij voor alle BETALING MET DEBETKAART
+  YukiDF$Naam_tegenrekening[grep("BETALING MET DEBETKAART", YukiDF$Omschrijving)]<-sapply(strsplit(YukiDF$Omschrijving[grep("BETALING MET DEBETKAART", YukiDF$Omschrijving)]," "),'[',9)
 }
 if (DType =="REV") {
   #BNPRaw<-read.table(ifile, header= TRUE, sep = ";", quote = "", dec = ",",stringsAsFactors = FALSE)
@@ -201,5 +200,5 @@ if (DType != "UNKNOWN") {
     row.names = FALSE,
     col.names = ColumnNames  # Vanwege de underscore in de header die geen spatie kan zijn
   ) 
-  message("File Created from: ", DType, " Aantal: ", NROF_Rawrecords, " Bedrag: ",sum(YukiDF$Bedrag))
-}  #schrijf gegegevns weg
+  message("File Created from: ", DType, " Nof Records: ", NROF_Rawrecords, " Amount: ",sum(YukiDF$Bedrag))
+}  #s Recognised document so write output file
