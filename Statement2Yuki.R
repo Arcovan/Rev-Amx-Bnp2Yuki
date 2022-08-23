@@ -126,13 +126,18 @@ if (DType =="BNP") {
   substr(BNPRaw$Uitvoeringsdatum ,4,5)
   substr(BNPRaw$Uitvoeringsdatum ,7,11)
   YukiDF$Naam_tegenrekening<-"" 
+  YukiDF$Naam_tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Naam.van.de.tegenpartij[grep("BIC",BNPRaw$Details)]
   YukiDF$Omschrijving<-gsub("BANKREFERENTIE","Ref",gsub("VALUTADATUM ","ValDat",BNPRaw$Details))
+  YukiDF$Naam_tegenrekening[length(BNPRaw$Mededeling)]
+  YukiDF$Omschrijving[which(BNPRaw$Mededeling!="")]<-paste(YukiDF$Omschrijving[which(BNPRaw$Mededeling!="")], "/", BNPRaw$Mededeling[which(BNPRaw$Mededeling!="")])
   YukiDF$Bedrag<-BNPRaw$Bedrag
   YukiDF$Tegenrekening<-""
   YukiDF$Tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Tegenpartij[grep("BIC",BNPRaw$Details)]
-  # split string in losse woorden en selecteer 9e woord als tegenpartij voor alle BETALING MET DEBETKAART
-  YukiDF$Naam_tegenrekening[grep("BETALING MET DEBETKAART", YukiDF$Omschrijving)]<-sapply(strsplit(YukiDF$Omschrijving[grep("BETALING MET DEBETKAART", YukiDF$Omschrijving)]," "),'[',9)
-}
+  # split string in losse woorden en selecteer 9e + 10e woord als tegenpartij voor alle BETALING MET DEBETKAART
+  YukiDF$Naam_tegenrekening[which(BNPRaw$Type.verrichting=="Kaartbetaling")]<-
+    paste(sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Kaartbetaling")]," "),'[',9),
+          sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Kaartbetaling")]," "),'[',10))
+  }
 if (DType =="REV") {
   #BNPRaw<-read.table(ifile, header= TRUE, sep = ";", quote = "", dec = ",",stringsAsFactors = FALSE)
   REVRaw<-read.csv(ifile, header= TRUE, sep = c(",",";"), quote = "", dec = ".",stringsAsFactors = FALSE)
