@@ -8,7 +8,7 @@ CheckDocType <- function(x) {
   if ( length(grep("Product",header))!= 0) { DocType<-"REV"} # soms zit er een extra kolom bij categorie
   if ( length(grep("Kaartlid",header))!= 0) { DocType<-"AMX"} # soms zit er een extra kolom bij categorie
   if ( length(grep("Uitvoeringsdatum",header)) != 0) { DocType<-"BNP"} # door de ; wordt deze ingelezen als 1 kolom
-  message("Nr Columns source: ", NrOfColumns, "\nDocType:",DocType)
+  message("Nr Columns RAW source: ", DocType ,"->", NrOfColumns)
   return(DocType)
 }
 CreateYukiDF <-function(x) {
@@ -57,9 +57,9 @@ message("Output file to directory: ", getwd())
 DType<-CheckDocType(ifile)
 # Test Switch functie
 switch (DType,
-        "AMX" = message("Document: AMEX"),
+        "AMX" = message("Document: AMEX based on 'Kaartlid' in header"),
         "BNP" = message("Document: BNP-Fortis"),
-        "REV" = message("Document: Revolut")
+        "REV" = message("Document: Revolut based on 'Product' in header")
 )
 # ==== Process Input file and create output DATAFRAME ====
 if (DType =="AMX") {
@@ -92,7 +92,6 @@ if (DType =="AMX") {
   # Disadvatage is original amount on statement cannot be found
   FeeRecords<-length(grep("Commission Amount:",AmexRaw$Aanvullende.informatie)) #number of records containing a Fee (transaction cost)
   if (FeeRecords>0) {
-    message("Fee")
     FeeDF<-CreateFeeDF(FeeRecords)
     FeeDF$IBAN<-YukiDF$IBAN[1]
     FeeDF$Valuta <-YukiDF$Valuta[1]
@@ -102,9 +101,10 @@ if (DType =="AMX") {
     FeeDF$Afschrift<-YukiDF$Afschrift[grep("Commission Amount:",AmexRaw$Aanvullende.informatie)] #number of records containing a Fee (transaction cost)
     FeeDF$Omschrijving<-paste("[FEE:]",YukiDF$Omschrijving[grep("Commission Amount:",AmexRaw$Aanvullende.informatie)])
     FeeList<-unlist(strsplit(FeeDF$Omschrijving," "))
-    FeeDF$Bedrag<--as.numeric(FeeList[which(tmp=="Commission")+2])
+    FeeDF$Bedrag<--as.numeric(FeeList[which(FeeList=="Commission")+2])
     YukiDF$Bedrag[grep("Commission Amount:",AmexRaw$Aanvullende.informatie)]<-YukiDF$Bedrag[grep("Commission Amount:",AmexRaw$Aanvullende.informatie)]-FeeDF$Bedrag
     View(FeeDF)
+    message("Fee Split in seperate Records: ",FeeRecords, " Fee Amount: ",sum(FeeDF$Bedrag))
     YukiDF<-rbind(YukiDF,FeeDF)
    }
 }
@@ -163,7 +163,6 @@ if (DType =="REV") {
   YukiDF$Naam_tegenrekening[which(REVRaw$Type=="TOPUP")]<-substr(REVRaw$Description[which(REVRaw$Type=="TOPUP")],14,35)
   FeeRecords<-nrow(REVRaw[REVRaw$Fee!=0,]) #number of records containing a Fee (transaction cost)
   if (FeeRecords>0) {
-    message("Fee")
     FeeDF<-CreateFeeDF(FeeRecords)
     FeeDF$IBAN<-paste("LT773250030128232439",REVRaw$Currency[1],sep = "")
     FeeDF$Valuta <-REVRaw$Currency[1]
@@ -174,6 +173,7 @@ if (DType =="REV") {
     FeeDF$Afschrift<-YukiDF$Afschrift[REVRaw$Fee!=0]
     FeeDF$Omschrijving<-paste("[FEE:]",REVRaw$Description[REVRaw$Fee!=0])
     View(FeeDF)
+    message("Fee Split in seperate Records: ",FeeRecords, " Fee Amount: ",sum(FeeDF$Bedrag))
     YukiDF<-rbind(YukiDF,FeeDF)
     } #Split fee to separate records
 } 
@@ -205,5 +205,5 @@ if (DType != "UNKNOWN") {
     row.names = FALSE,
     col.names = ColumnNames  # Vanwege de underscore in de header die geen spatie kan zijn
   ) 
-  message("File Created from: ", DType, " Nof Records: ", NROF_Rawrecords, " Amount: ",sum(YukiDF$Bedrag))
+  message("File Created from: ", DType, " Nof Raw Records: ", NROF_Rawrecords," Total Records created:",nrow(YukiDF), " Amount: ",sum(YukiDF$Bedrag))
 }  #s Recognised document so write output file
