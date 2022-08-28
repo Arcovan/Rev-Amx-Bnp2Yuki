@@ -49,7 +49,7 @@ if (ifile == "") {
 getOption("OutDec")       #check what decimal point is and return "." or ","
 options(OutDec = ".")     #set decimal point to "."
 setwd(dirname(ifile))     #set working directory to input directory where file is
-ofile <- gsub(".csv", "-YukiR.csv", ifile)
+ofile <- sub(".csv", "-YukiR.csv", ifile)
 message("Input file: ", ifile, "\nOutput file: ", ofile)
 message("Output file to directory: ", getwd())
 # Filename <- readline(prompt = "Welke filename?")
