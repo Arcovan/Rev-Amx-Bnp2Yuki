@@ -4,13 +4,17 @@
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
   header<-readLines(x,skip=0, n = 1)
-  NrOfColumns<-length(strsplit(header,"[;,]")[[1]]) #splits header in velden door seperator , of ;
-  if ( length(grep("Product",header))!= 0) { DocType<-"REV"} # soms zit er een extra kolom bij categorie
+  NrOfColumns<-length(strsplit(header,"[;,]")[[1]])           # splits header in velden door seperator , of ;
+  if ( length(grep("Product",header))!= 0) { DocType<-"REV"}  # soms zit er een extra kolom bij categorie
   if ( length(grep("Kaartlid",header))!= 0) { DocType<-"AMX"} # soms zit er een extra kolom bij categorie
   if ( length(grep("Uitvoeringsdatum",header)) != 0) { DocType<-"BNP"} # door de ; wordt deze ingelezen als 1 kolom
+  if ( length(grep("Booking",header))!= 0) { DocType<-"JUB"} 
   message("Nr Columns RAW source: ", DocType ,"->", NrOfColumns)
+  if (DocType =="UNKNOWN") { 
+    message("Did not understand this header:\n", header, "\n")
+    }
   return(DocType)
-}
+} # check document type based on keywords in header
 CreateYukiDF <-function(x) {
   # x = nr of records to be created
   YukiDF <- data.frame(IBAN = character(length = x),
@@ -22,8 +26,8 @@ CreateYukiDF <-function(x) {
                        Naam_tegenrekening = character(length = x),
                        Omschrijving = character(length = x),
                        Bedrag = integer(length = x))
-  return(YukiDF) # return data frame which will be used for export
-}
+  return(YukiDF) 
+}  # data frame which will be used for export to CSV
 CreateFeeDF <-function(x) {
   # x = nr of records to be created
   FeeDF <- data.frame(IBAN = character(length = x),
@@ -36,20 +40,20 @@ CreateFeeDF <-function(x) {
                        Omschrijving = character(length = x),
                        Bedrag = integer(length = x))
   return(FeeDF) # return data frame which will be used for export
-} # Dataframe to split fee from lines
+}   # Dataframe to split fee from lines
 
 ifile <- file.choose()    #Select Import file Stop is incorrect
 if (length(grep(".csv", ifile)) == 0) {
-  stop("Please choose file with extension 'csv'.\n")
+  stop("Please choose file with extension 'csv'.\n", call. = FALSE)
 }
 if (ifile == "") {
-  stop("Empty File name [ifile]\n")
+  stop("Empty File name [ifile]\n", call. = FALSE)
 }
 # ==== SET Environment ====
-getOption("OutDec")       #check what decimal point is and return "." or ","
+# getOption("OutDec")     #check what decimal point is and return "." or ","
 options(OutDec = ".")     #set decimal point to "."
 setwd(dirname(ifile))     #set working directory to input directory where file is
-ofile <- sub(".csv", "-YukiR.csv", ifile)
+ofile <- sub(".csv", "-YukiR.csv", ifile) # output file
 message("Input file: ", ifile, "\nOutput file: ", ofile)
 message("Output file to directory: ", getwd())
 # Filename <- readline(prompt = "Welke filename?")
@@ -58,12 +62,13 @@ DType<-CheckDocType(ifile)
 # Test Switch functie
 switch (DType,
         "AMX" = message("Document: AMEX based on 'Kaartlid' in header"),
-        "BNP" = message("Document: BNP-Fortis"),
-        "REV" = message("Document: Revolut based on 'Product' in header")
+        "BNP" = message("Document: BNP-Fortis based on 'Uitvoeringsdatum' in header"),
+        "REV" = message("Document: Revolut based on 'Product' in header"),
+        "UNKNOWN" = stop("Unknown format: Relevant Keyword not found in header",call. = FALSE)
 )
 # ==== Process Input file and create output DATAFRAME ====
 if (DType =="AMX") {
-  AmexRaw <-read.csv(ifile,header = TRUE ,stringsAsFactors = FALSE)   #Reads field as factors or as characters
+  AmexRaw <-read.csv(ifile, header = TRUE ,sep = "," , dec = ",", stringsAsFactors = FALSE)   #Reads field as factors or as characters
   NROF_Rawrecords <- nrow(AmexRaw)
   message("Aantal ingelezen records: ", NROF_Rawrecords)
   AmexRaw[, "Omschrijving"] <-
@@ -74,7 +79,7 @@ if (DType =="AMX") {
   # Create empty data frame
   YukiDF<-CreateYukiDF(NROF_Rawrecords)
   AfschriftNR<-substr(AmexRaw$Datum[which(AmexRaw$Omschrijving=="HARTELIJK BEDANKT VOOR UW BETALING")],1,2)
-  if (length(AfschriftNR) == 0) { stop("Betaling niet gevonden") }
+  if (length(AfschriftNR) == 0) { stop("Betaling niet gevonden",call. = FALSE) }
   # unlist(gregexpr(" ",YukiDF$Naam_tegenrekening))    # positie van Spaties
   YukiDF$IBAN<-"3753.8822.3759.008"
   YukiDF$Valuta<-"EUR"
@@ -85,7 +90,7 @@ if (DType =="AMX") {
   YukiDF$Omschrijving<-paste(substr(AmexRaw$Kaartlid,1,2),":",gsub(",",".",AmexRaw$Omschrijving))
   YukiDF$Omschrijving[which(AmexRaw$Aanvullende.informatie!="")]<-paste(YukiDF$Omschrijving[which(AmexRaw$Aanvullende.informatie!="")],"#",gsub(",",".",AmexRaw$Aanvullende.informatie[which(AmexRaw$Aanvullende.informatie!="")]))
   YukiDF$Omschrijving<- gsub("\n","##",YukiDF$Omschrijving)  #Vervang line feed door twee hash tags
-  YukiDF$Bedrag<-as.numeric(gsub(",",".",AmexRaw$Bedrag))*-1
+  YukiDF$Bedrag<-AmexRaw$Bedrag*-1
   YukiDF$Naam_tegenrekening[which(AmexRaw$Omschrijving=="HARTELIJK BEDANKT VOOR UW BETALING")]<-"American Express"
   aggregate.data.frame(YukiDF$Bedrag, list( substr(YukiDF$Omschrijving,1,2)) ,sum)
   # ==== Additional Records created for Commission charged by AMEX ====
@@ -116,7 +121,6 @@ if (DType =="BNP") {
   View(BNPRaw)
   # Create empty data frame
   YukiDF <- CreateYukiDF(NROF_Rawrecords)
-  
   YukiDF$IBAN<-BNPRaw$Rekeningnummer
   YukiDF$Valuta<-"EUR"
   YukiDF$Datum<-gsub("/","-",BNPRaw$Uitvoeringsdatum)
@@ -206,4 +210,4 @@ if (DType != "UNKNOWN") {
     col.names = ColumnNames  # Vanwege de underscore in de header die geen spatie kan zijn
   ) 
   message("File Created from: ", DType, " Nof Raw Records: ", NROF_Rawrecords," Total Records created:",nrow(YukiDF), " Amount: ",sum(YukiDF$Bedrag))
-}  #s Recognised document so write output file
+} #s Recognised document so write output file
