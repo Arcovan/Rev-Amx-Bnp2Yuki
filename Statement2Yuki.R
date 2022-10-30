@@ -1,5 +1,8 @@
 # This program converts convert statements from AMEX or BNP to format to import in
 # accounting system CSV provided by AMEX/BNP is converted to CSV
+# For AMEX:
+#   Download transactions via https://www.americanexpress.com/
+#   Choose format : CSV and include transaction details/
 # ===== Define Functions ===== 23 aug
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
@@ -55,7 +58,6 @@ options(OutDec = ".")     #set decimal point to "."
 setwd(dirname(ifile))     #set working directory to input directory where file is
 ofile <- sub(".csv", "-YukiR.csv", ifile) # output file
 message("Input file: ", ifile, "\nOutput file: ", ofile)
-message("Output file to directory: ", getwd())
 # Filename <- readline(prompt = "Welke filename?")
 
 DType<-CheckDocType(ifile)
@@ -67,6 +69,7 @@ switch (DType,
         "UNKNOWN" = stop("Unknown format: Relevant Keyword not found in header",call. = FALSE)
 )
 # ==== Process Input file and create output DATAFRAME ====
+
 if (DType =="AMX") {
   AmexRaw <-read.csv(ifile, header = TRUE ,sep = "," , dec = ",", stringsAsFactors = FALSE)   #Reads field as factors or as characters
   NROF_Rawrecords <- nrow(AmexRaw)
@@ -81,18 +84,17 @@ if (DType =="AMX") {
   AfschriftNR<-substr(AmexRaw$Datum[which(AmexRaw$Omschrijving=="HARTELIJK BEDANKT VOOR UW BETALING")],1,2)
   if (length(AfschriftNR) == 0) { stop("Betaling niet gevonden",call. = FALSE) }
   # unlist(gregexpr(" ",YukiDF$Naam_tegenrekening))    # positie van Spaties
-  YukiDF$IBAN<-"3753.8822.3759.008"
+  YukiDF$IBAN<-"3753.8822.3759.008"     # nb Hard coded should be changed for other Cards
   YukiDF$Valuta<-"EUR"
   YukiDF$Datum<-format(as.Date(AmexRaw[,"Datum"],"%m/%d/%Y"),format ="%d-%m-%Y")
   YukiDF$Rentedatum<-YukiDF$Datum
   YukiDF$Afschrift<-paste(substr(YukiDF$Datum,7,11),AfschriftNR, sep="")
-  YukiDF$Naam_tegenrekening<-gsub(",",".",gsub("^([^ ]* [^ ]*) .*$", "\\1", AmexRaw$Omschrijving)) # CopY all until 2nd SPACE, "paste(strsplit(s," ")[[1]][1:2],collapse = " ")" kan ook
-  YukiDF$Omschrijving<-paste(substr(AmexRaw$Kaartlid,1,2),":",gsub(",",".",AmexRaw$Omschrijving))
+  YukiDF$Naam_tegenrekening<-gsub(",",".",gsub("^([^ ]* [^ ]*) .*$", "\\1", AmexRaw$Omschrijving)) # Copy all until 2nd SPACE, "paste(strsplit(s," ")[[1]][1:2],collapse = " ")" kan ook
+  YukiDF$Omschrijving<-paste(substr(AmexRaw$Kaartlid,1,2),":",gsub(",",".",AmexRaw$Omschrijving))  # Add 1st 2 chars of member to Description and swap , for .
   YukiDF$Omschrijving[which(AmexRaw$Aanvullende.informatie!="")]<-paste(YukiDF$Omschrijving[which(AmexRaw$Aanvullende.informatie!="")],"#",gsub(",",".",AmexRaw$Aanvullende.informatie[which(AmexRaw$Aanvullende.informatie!="")]))
-  YukiDF$Omschrijving<- gsub("\n","##",YukiDF$Omschrijving)  #Vervang line feed door twee hash tags
+  YukiDF$Omschrijving<- gsub("\n","##",YukiDF$Omschrijving)  # Replace line feed in description for 2 hash tags
   YukiDF$Bedrag<-AmexRaw$Bedrag*-1
   YukiDF$Naam_tegenrekening[which(AmexRaw$Omschrijving=="HARTELIJK BEDANKT VOOR UW BETALING")]<-"American Express"
-  aggregate.data.frame(YukiDF$Bedrag, list( substr(YukiDF$Omschrijving,1,2)) ,sum)
   # ==== Additional Records created for Commission charged by AMEX ====
   # Disadvatage is original amount on statement cannot be found
   FeeRecords<-length(grep("Commission Amount:",AmexRaw$Aanvullende.informatie)) #number of records containing a Fee (transaction cost)
@@ -127,8 +129,8 @@ if (DType =="BNP") {
   YukiDF$Rentedatum<-gsub("/","-",BNPRaw$Valutadatum)
   #YukiDF$Afschrift<-gsub("-","",BNPRaw$Volgnummer)
   YukiDF$Afschrift<-paste(substr(BNPRaw$Uitvoeringsdatum ,7,11),substr(BNPRaw$Uitvoeringsdatum ,4,5),sep="")
-  substr(BNPRaw$Uitvoeringsdatum ,4,5)
-  substr(BNPRaw$Uitvoeringsdatum ,7,11)
+  # substr(BNPRaw$Uitvoeringsdatum ,4,5)
+  # substr(BNPRaw$Uitvoeringsdatum ,7,11)
   YukiDF$Naam_tegenrekening<-"" 
   YukiDF$Naam_tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Naam.van.de.tegenpartij[grep("BIC",BNPRaw$Details)]
   YukiDF$Omschrijving<-gsub("BANKREFERENTIE","Ref",gsub("VALUTADATUM ","ValDat",BNPRaw$Details))
@@ -141,6 +143,10 @@ if (DType =="BNP") {
   YukiDF$Naam_tegenrekening[which(BNPRaw$Type.verrichting=="Kaartbetaling")]<-
     paste(sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Kaartbetaling")]," "),'[',9),
           sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Kaartbetaling")]," "),'[',10))
+# Add name to Cash withdrawal ---------------------------------------------
+  YukiDF$Naam_tegenrekening[which(BNPRaw$Type.verrichting=="Geldopname met kaart")]<-
+    paste(sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Geldopname met kaart")]," "),'[',11))
+  YukiDF$Naam_tegenrekening[which(YukiDF$Naam_tegenrekening=="4871")]<-"Karin van Leeuwen"
   }
 if (DType =="REV") {
   #BNPRaw<-read.table(ifile, header= TRUE, sep = ";", quote = "", dec = ",",stringsAsFactors = FALSE)
