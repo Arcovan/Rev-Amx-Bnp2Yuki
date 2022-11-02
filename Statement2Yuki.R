@@ -1,9 +1,10 @@
-# This program converts convert statements from AMEX or BNP to format to import in
-# accounting system CSV provided by AMEX/BNP is converted to CSV
+# This program converts statements CSV from AMEX or BNP to a format to import in
+# accounting system 
 # For AMEX:
 #   Download transactions via https://www.americanexpress.com/
-#   Choose format : CSV and include transaction details/
-# ===== Define Functions ===== 23 aug
+#   Choose format : CSV and include transaction details
+# 02-nov-2022
+# ===== Define Functions and read file===== 
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
   header<-readLines(x,skip=0, n = 1)
@@ -44,21 +45,19 @@ CreateFeeDF <-function(x) {
                        Bedrag = integer(length = x))
   return(FeeDF) # return data frame which will be used for export
 }   # Dataframe to split fee from lines
-
 ifile <- file.choose()    #Select Import file Stop is incorrect
-if (length(grep(".csv", ifile)) == 0) {
+#==== Check file type selected Should be CSV extension, Empty seems impossible
+if (!(grepl(".csv",ifile))) {     # Grepl = grep logical
   stop("Please choose file with extension 'csv'.\n", call. = FALSE)
 }
 if (ifile == "") {
   stop("Empty File name [ifile]\n", call. = FALSE)
 }
 # ==== SET Environment ====
-# getOption("OutDec")     #check what decimal point is and return "." or ","
 options(OutDec = ".")     #set decimal point to "."
 setwd(dirname(ifile))     #set working directory to input directory where file is
 ofile <- sub(".csv", "-YukiR.csv", ifile) # output file
 message("Input file: ", ifile, "\nOutput file: ", ofile)
-# Filename <- readline(prompt = "Welke filename?")
 
 DType<-CheckDocType(ifile)
 # Test Switch functie
@@ -69,7 +68,6 @@ switch (DType,
         "UNKNOWN" = stop("Unknown format: Relevant Keyword not found in header",call. = FALSE)
 )
 # ==== Process Input file and create output DATAFRAME ====
-
 if (DType =="AMX") {
   AmexRaw <-read.csv(ifile, header = TRUE ,sep = "," , dec = ",", stringsAsFactors = FALSE)   #Reads field as factors or as characters
   NROF_Rawrecords <- nrow(AmexRaw)
@@ -194,6 +192,7 @@ if (DType != "UNKNOWN") {
   View(YukiDF)
   Smry<-aggregate.data.frame(YukiDF$Bedrag, list(YukiDF$Naam_tegenrekening) ,sum)
   View(Smry)
+  aggregate.data.frame(YukiDF$Bedrag, list(substr(YukiDF$Omschrijving,1,2)) ,sum)
   ColumnNames <-
     c(
       "IBAN",
