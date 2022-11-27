@@ -3,8 +3,9 @@
 # For AMEX:
 #   Download transactions via https://www.americanexpress.com/
 #   Choose format : CSV and include transaction details
-# 02-nov-2022
-# ===== Define Functions and read file===== 
+# 26-nov-2022
+
+# ===== Define Functions --------------------------------------------------
 CheckDocType <- function(x) {
   DocType<-"UNKNOWN"
   header<-readLines(x,skip=0, n = 1)
@@ -45,22 +46,25 @@ CreateFeeDF <-function(x) {
                        Bedrag = integer(length = x))
   return(FeeDF) # return data frame which will be used for export
 }   # Dataframe to split fee from lines
+
+# ==== Read and Check import file ----------------------------------------
 ifile <- file.choose()    #Select Import file Stop is incorrect
-#==== Check file type selected Should be CSV extension, Empty seems impossible
-if (!(grepl(".csv",ifile))) {     # Grepl = grep logical
+if (!(grepl(".csv",basename(ifile),ignore.case = TRUE))) {     # Grepl = grep logical
   stop("Please choose file with extension 'csv'.\n", call. = FALSE)
 }
 if (ifile == "") {
   stop("Empty File name [ifile]\n", call. = FALSE)
 }
+ofile <- sub(".csv", "-YukiR.csv", ifile, ignore.case = TRUE) # output file
+setwd(dirname(ifile))     #set working directory to input directory where file is
+message("Input file: ", basename(ifile), "\nOutput file: ", basename(ofile)) # display file name and output file with full dir name
+message("Output file to directory: ", getwd())
+
 # ==== SET Environment ====
 options(OutDec = ".")     #set decimal point to "."
-setwd(dirname(ifile))     #set working directory to input directory where file is
-ofile <- sub(".csv", "-YukiR.csv", ifile) # output file
-message("Input file: ", ifile, "\nOutput file: ", ofile)
 
-DType<-CheckDocType(ifile)
 # Test Switch functie
+DType<-CheckDocType(ifile)
 switch (DType,
         "AMX" = message("Document: AMEX based on 'Kaartlid' in header"),
         "BNP" = message("Document: BNP-Fortis based on 'Uitvoeringsdatum' in header"),
