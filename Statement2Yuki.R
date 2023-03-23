@@ -1,9 +1,9 @@
 # This program converts statements CSV from AMEX, BNP,Revolut or Julius Bar to a format
-# to import into accounting system 
+# to import into accounting system (Yuki)
 # For AMEX:
 #   Download transactions via https://www.americanexpress.com/
 #   Choose format : CSV and include transaction details
-# 26-nov-2022
+# Last Edit date: 23-mar-2023 / Files is managed in Github
 
 # ===== Define Functions --------------------------------------------------
 CheckDocType <- function(x) {
@@ -118,7 +118,7 @@ if (DType =="AMX") {
 if (DType =="BNP") {
   BNPRaw<-read.csv(ifile, header= TRUE, sep = ";", quote = "", dec = ",",stringsAsFactors = FALSE)
   NROF_Rawrecords <- nrow(BNPRaw)
-  BNPRaw$Details <- gsub("\\s+", "", BNPRaw$Details) # eplace all instances of double or more spaces with a single space
+  BNPRaw$Details <- gsub("\\s+", " ", BNPRaw$Details) # eplace all instances of double or more spaces with a single space
   View(BNPRaw)
   # Create empty data frame
   YukiDF <- CreateYukiDF(NROF_Rawrecords)
@@ -255,4 +255,6 @@ if (DType != "UNKNOWN") {
     col.names = ColumnNames  # Vanwege de underscore in de header die geen spatie kan zijn
   ) 
   message("File Created from: ", DType, " Nof Raw Records: ", NROF_Rawrecords," Total Records created:",nrow(YukiDF), " Amount: ",formatC(sum(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2))
+  message("Highest amount: ",formatC(max(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2))
+  
 } #s Recognised document so write output file
