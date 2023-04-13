@@ -4,46 +4,67 @@
 #   Download transactions via https://www.americanexpress.com/
 #   Choose format : CSV and include transaction details
 # Last Edit date: 23-mar-2023 / Files is managed in Github
-
+rm(list = ls())  # clear environment
+cat("\014")      # clear console (CLS)
+cat("Supported banks: Revolut, Amex, BNP and Julius Baer\n")
 # ===== Define Functions --------------------------------------------------
 CheckDocType <- function(x) {
+  doc_types <- list(                # fields used to check which file format is presented
+    "REV" = c("Product"),            # Revolut Bank
+    "AMX" = c("Kaartlid"),           # American Express
+    "BNP" = c("Uitvoeringsdatum"),   # BNP Paribas (Belgiu)
+    "JUB" = c("Booking")             # Julius Baer
+  )
+  doc_nfields <- list(    # nr of fields in Header
+    "REV" = 11,           # Revolut Bank
+    "AMX" = 13,           # American Express
+    "BNP" = 13,           # BNP Paribas (Belgiu)
+    "JUB" = 6            # Julius Baer
+  )
+  if (file.info(x)$size == 0) {stop("File is empty: ", x)}
+  # Read the first line of the file as the header
+  header <- tryCatch(readLines(x, n = 1), error = function(e) NULL)
+  if (is.null(header)) {stop("Failed to read header from file: ", x)}
   DocType<-"UNKNOWN"
   header<-readLines(x,skip=0, n = 1)
   NrOfColumns<-length(strsplit(header,"[;,]")[[1]])           # splits header in velden door seperator , of ;
-  if ( length(grep("Product",header))!= 0) { DocType<-"REV"}  # soms zit er een extra kolom bij categorie
-  if ( length(grep("Kaartlid",header))!= 0) { DocType<-"AMX"} # soms zit er een extra kolom bij categorie
-  if ( length(grep("Uitvoeringsdatum",header)) != 0) { DocType<-"BNP"} # door de ; wordt deze ingelezen als 1 kolom
-  if ( length(grep("Booking",header))!= 0) { DocType<-"JUB"} 
-  message("RAW source: ", DocType ," Nr Columns->", NrOfColumns)
+  for (type in names(doc_types)) {
+    if (grepl(doc_types[[type]], header) & (NrOfColumns==doc_nfields[[type]])) {
+      DocType <- type
+      break
+    }
+  }
   if (DocType =="UNKNOWN") { 
     message("Did not understand this header:\n", header, "\n")
-    }
+    stop("Unknown format: Relevant Keyword not found in header",call. = FALSE)
+  }
+  message("INPUT format: ", DocType, " based on \"",doc_types[DocType], "\" in header and Nr Columns:", NrOfColumns)
   return(DocType)
 } # check document type based on keywords in header
 CreateYukiDF <-function(x) {
   # x = nr of records to be created
   YukiDF <- data.frame(IBAN = character(length = x),
                        Valuta = character(length = x),
-                       Afschrift = numeric(length = x),
+                       Afschrift = integer(length = x),
                        Datum = character(length = x),
                        Rentedatum = character(length = x),
                        Tegenrekening = character(length = x),
                        Naam_tegenrekening = character(length = x),
                        Omschrijving = character(length = x),
-                       Bedrag = integer(length = x))
+                       Bedrag = numeric(length = x))
   return(YukiDF) 
 }  # data frame which will be used for export to CSV
 CreateFeeDF <-function(x) {
   # x = nr of records to be created
   FeeDF <- data.frame(IBAN = character(length = x),
                        Valuta = character(length = x),
-                       Afschrift = numeric(length = x),
+                       Afschrift = integer(length = x),
                        Datum = character(length = x),
                        Rentedatum = character(length = x),
                        Tegenrekening = character(length = x),
                        Naam_tegenrekening = character(length = x),
                        Omschrijving = character(length = x),
-                       Bedrag = integer(length = x))
+                       Bedrag = numeric(length = x))
   return(FeeDF) # return data frame which will be used for export
 }   # Dataframe to split fee from lines
 
@@ -63,22 +84,15 @@ message("Output file to directory: ", getwd())
 # ==== SET Environment ====
 options(OutDec = ".")     #set decimal point to "."
 
-# Test Switch functie
 DType<-CheckDocType(ifile)
-switch (DType,
-        "AMX" = message("Document: AMEX based on 'Kaartlid' in header"),
-        "BNP" = message("Document: BNP-Fortis based on 'Uitvoeringsdatum' in header"),
-        "REV" = message("Document: Revolut based on 'Product' in header"),
-        "JUB" = message("Document: JuliusBar based on 'Booking' in header"),
-        "UNKNOWN" = stop("Unknown format: Relevant Keyword not found in header",call. = FALSE)
-)
 # ==== Process Input file and create output DATAFRAME ====
 if (DType =="AMX") {
   AmexRaw <-read.csv(ifile, header = TRUE ,sep = "," , dec = ",", stringsAsFactors = FALSE)   #Reads field as factors or as characters
+  if (ncol(AmexRaw)!=13) {stop("Aantal kolommen is: ", ncol(AmexRaw), "; Inclusief transactiedetails vergeten aan te vinken.",call. = FALSE)}
   NROF_Rawrecords <- nrow(AmexRaw)
-  AmexRaw$Omschrijving <-gsub("\\s+", " ", AmexRaw$Omschrijving) # eplace all instances of double or more spaces with a single space
+  AmexRaw$Omschrijving <-gsub("\\s+", " ", AmexRaw$Omschrijving) # Replace all instances of double or more spaces with a single space
   AmexRaw$Vermeld.op.uw.rekeningoverzicht.als <-
-    gsub("\\s+", " ", AmexRaw$Vermeld.op.uw.rekeningoverzicht.als) #seplace all instances of double or more spaces with a single space
+    gsub("\\s+", " ", AmexRaw$Vermeld.op.uw.rekeningoverzicht.als) #replace all instances of double or more spaces with a single space
   View(AmexRaw)
   # Create empty data frame
   YukiDF<-CreateYukiDF(NROF_Rawrecords)
@@ -92,7 +106,6 @@ if (DType =="AMX") {
   YukiDF$Naam_tegenrekening<-gsub(",",".",gsub("^([^ ]* [^ ]*) .*$", "\\1", AmexRaw$Omschrijving)) # Copy all until 2nd SPACE, "paste(strsplit(s," ")[[1]][1:2],collapse = " ")" kan ook
   YukiDF$Omschrijving<-paste(substr(AmexRaw$Kaartlid,1,2),":",gsub(",",".",AmexRaw$Omschrijving))  # Add 1st 2 chars of member to Description and swap , for .
   YukiDF$Omschrijving[which(AmexRaw$Aanvullende.informatie!="")]<-paste(YukiDF$Omschrijving[which(AmexRaw$Aanvullende.informatie!="")],"#",gsub(",",".",AmexRaw$Aanvullende.informatie[which(AmexRaw$Aanvullende.informatie!="")]))
-  YukiDF$Omschrijving<- gsub("\n","##",YukiDF$Omschrijving)  # Replace line feed in description for 2 hash tags
   YukiDF$Bedrag<-AmexRaw$Bedrag*-1
   YukiDF$Naam_tegenrekening[which(AmexRaw$Omschrijving=="HARTELIJK BEDANKT VOOR UW BETALING")]<-"American Express"
   # ==== Additional Records created for Commission charged by AMEX ====
@@ -118,7 +131,7 @@ if (DType =="AMX") {
 if (DType =="BNP") {
   BNPRaw<-read.csv(ifile, header= TRUE, sep = ";", quote = "", dec = ",",stringsAsFactors = FALSE)
   NROF_Rawrecords <- nrow(BNPRaw)
-  BNPRaw$Details <- gsub("\\s+", " ", BNPRaw$Details) # eplace all instances of double or more spaces with a single space
+  BNPRaw$Details <- gsub("\\s+", " ", BNPRaw$Details) # replace all instances of double or more spaces with a single space
   View(BNPRaw)
   # Create empty data frame
   YukiDF <- CreateYukiDF(NROF_Rawrecords)
@@ -136,19 +149,26 @@ if (DType =="BNP") {
   YukiDF$Tegenrekening<-""
   YukiDF$Tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Tegenpartij[grep("BIC",BNPRaw$Details)]
   # split string in losse woorden en selecteer 9e + 10e woord als tegenpartij voor alle BETALING MET DEBETKAART
-  YukiDF$Naam_tegenrekening[which(BNPRaw$Type.verrichting=="Kaartbetaling")]<-
-    paste(sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Kaartbetaling")]," "),'[',9),
-          sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Kaartbetaling")]," "),'[',10))
-# Add name to Cash withdrawal ---------------------------------------------
+  kaartbetaling_rows <- BNPRaw$Type.verrichting == "Kaartbetaling"
+  YukiDF$Naam_tegenrekening[kaartbetaling_rows] <- paste(
+    sapply(strsplit(YukiDF$Omschrijving[kaartbetaling_rows], " "), '[', 9),
+    sapply(strsplit(YukiDF$Omschrijving[kaartbetaling_rows], " "), '[', 10)
+  )
+  # Add name to Cash withdrawal ---------------------------------------------
   YukiDF$Naam_tegenrekening[which(BNPRaw$Type.verrichting=="Geldopname met kaart")]<-
-    paste(sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Geldopname met kaart")]," "),'[',11))
-  YukiDF$Naam_tegenrekening[which(YukiDF$Naam_tegenrekening=="4871")]<-"Karin van Leeuwen"
+    paste(sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Geldopname met kaart")]," "),'[',13))
+  YukiDF$Naam_tegenrekening[which(YukiDF$Naam_tegenrekening=="8706")]<-"Karin van Leeuwen"
+  YukiDF$Naam_tegenrekening[which(YukiDF$Naam_tegenrekening=="7729")]<-"Arco van Nieuwland"
+  
+  # Add name to Card transaction --------
+  YukiDF$Omschrijving<-gsub("BETALING MET DEBETKAART NUMMER 4871 04XX XXXX 8706","BETALING MET KAART Nr 4871 xx 8706 (Karin)",YukiDF$Omschrijving)
+  YukiDF$Omschrijving<-gsub("BETALING MET DEBETKAART NUMMER 4871 04XX XXXX 7729","BETALING MET KAART Nr 4871 xx 7729 (Arco)",YukiDF$Omschrijving)
   }
 if (DType =="REV") {
   REVRaw<-read.csv(ifile, header= TRUE, sep = c(",",";"), quote = "", dec = ".",stringsAsFactors = FALSE)
-  REVRaw$Details <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", REVRaw$Description, perl = TRUE) #strip all double spaces
-  View(REVRaw)
   NROF_Rawrecords <- nrow(REVRaw)
+  REVRaw$Details <- gsub("\\s+", " ", REVRaw$Description) # Replace all instances of double or more spaces with a single space
+  View(REVRaw)
   aggregate.data.frame(REVRaw$Amount, list(REVRaw$Type) ,sum)
   # Create empty data frame
   YukiDF <- CreateYukiDF(NROF_Rawrecords) # create DF for output with same nr of rows
@@ -185,19 +205,19 @@ if (DType =="REV") {
 if (DType =="JUB") {
   JUBRaw <-read.csv(ifile, header= TRUE, sep = ",",  dec = ".", stringsAsFactors = FALSE, quote = "\"")
   NROF_Rawrecords <- nrow(JUBRaw)
+  JUBRaw$Booking.text <- gsub("\\s+", " ", JUBRaw$Booking.text) # Replace all instances of double or more spaces with a single space
   Currency<-substr(colnames(JUBRaw)[6],9,12)
   colnames(JUBRaw)[6]<-"Balance"
   # after following operation RAW is not RAW anymore ;)
-  # prepare amounts 
-  JUBRaw$Credit[which(JUBRaw$Credit=="")]<-sub("","0",JUBRaw$Credit[which(JUBRaw$Credit=="")],ignore.case = TRUE)
+  # prepare amounts JB delivers funny format with quotes as thousand seperator
+  JUBRaw$Credit[which(JUBRaw$Credit=="")]<-sub("","0",JUBRaw$Credit[which(JUBRaw$Credit=="")],ignore.case = TRUE) # so values can be converted to numeric
   JUBRaw$Debit[which(JUBRaw$Debit=="")]<-sub("","0",JUBRaw$Debit[which(JUBRaw$Debit=="")],ignore.case = TRUE)
   JUBRaw$Debit<-as.numeric(gsub("\'","", JUBRaw$Debit, ignore.case = TRUE))
   JUBRaw$Credit<-as.numeric(gsub("\'","", JUBRaw$Credit, ignore.case = TRUE))
-  JUBRaw$Balance<-gsub("\'","", JUBRaw$Balance, ignore.case = TRUE)
-  JUBRaw$Balance<-as.numeric(JUBRaw$Balance)
-  JUBRaw$Booking.text <- gsub("(?<=[\\s])\\s*|^\\s+|\\s+$", "", JUBRaw$Booking.text, perl = TRUE) #strip all double spaces
+  JUBRaw$Balance<-as.numeric(gsub("\'","", JUBRaw$Balance, ignore.case = TRUE))
+
   View(JUBRaw)
- 
+  # Create empty data frame
   YukiDF <- CreateYukiDF(NROF_Rawrecords) # Create empty data frame
   switch (Currency,
           "CHF" = YukiDF$IBAN<-"CH1108515052916502001",
@@ -228,10 +248,11 @@ if (DType =="JUB") {
 if (DType != "UNKNOWN") {
   YukiDF$Naam_tegenrekening<-gsub("\\s+", " ", YukiDF$Naam_tegenrekening)
   YukiDF$Omschrijving<-gsub("\\s+", " ", YukiDF$Omschrijving)
+  YukiDF$Omschrijving<-gsub("\n","##",YukiDF$Omschrijving)  # Replace line feed in description for 2 hash tags
   View(YukiDF)
   Smry<-aggregate.data.frame(YukiDF$Bedrag, list(YukiDF$Naam_tegenrekening) ,sum)
   View(Smry)
-  
+  if (exists("FeeDF") ) {message("Totale kosten:",DType,":",sum(FeeDF$Bedrag))}
   aggregate.data.frame(YukiDF$Bedrag, list(substr(YukiDF$Omschrijving,1,2)) ,sum)
   ColumnNames <-
     c(
@@ -255,6 +276,6 @@ if (DType != "UNKNOWN") {
     col.names = ColumnNames  # Vanwege de underscore in de header die geen spatie kan zijn
   ) 
   message("File Created from: ", DType, " Nof Raw Records: ", NROF_Rawrecords," Total Records created:",nrow(YukiDF), " Amount: ",formatC(sum(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2))
-  message("Highest amount: ",formatC(max(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2))
-  
+  cat("Highest amount: ",formatC(min(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2))
+
 } #s Recognised document so write output file
