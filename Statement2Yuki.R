@@ -3,10 +3,13 @@
 # For AMEX:
 #   Download transactions via https://www.americanexpress.com/
 #   Choose format : CSV and include transaction details
-# Last Edit date: 23-mar-2023 / Files is managed in Github
+# Last Edit date:8-may-2023 / Files is managed in Github
 rm(list = ls())  # clear environment
 cat("\014")      # clear console (CLS)
 cat("Supported banks: Revolut, Amex, BNP and Julius Baer\n")
+# ==== SET Environment ====
+options(OutDec = ".")     #set decimal point to "."
+options(scipen = 999)     # avoid scientific notation for large amounts
 # ===== Define Functions --------------------------------------------------
 CheckDocType <- function(x) {
   doc_types <- list(                # fields used to check which file format is presented
@@ -21,7 +24,7 @@ CheckDocType <- function(x) {
     "BNP" = 13,           # BNP Paribas (Belgiu)
     "JUB" = 6            # Julius Baer
   )
-  if (file.info(x)$size == 0) {stop("File is empty: ", x)}
+
   # Read the first line of the file as the header
   header <- tryCatch(readLines(x, n = 1), error = function(e) NULL)
   if (is.null(header)) {stop("Failed to read header from file: ", x)}
@@ -73,16 +76,12 @@ ifile <- file.choose()    #Select Import file Stop is incorrect
 if (!(grepl(".csv",basename(ifile),ignore.case = TRUE))) {     # Grepl = grep logical
   stop("Please choose file with extension 'csv'.\n", call. = FALSE)
 }
-if (ifile == "") {
-  stop("Empty File name [ifile]\n", call. = FALSE)
-}
+if (ifile == "") {stop("Empty File name [ifile]\n", call. = FALSE)}
+if (file.info(ifile)$size == 0) {stop("File is empty: ", ifile, call. = FALSE)}
 setwd(dirname(ifile))     #set working directory to input directory where file is
 ofile <- sub("\\.csv", "-YukiR\\.csv", ifile, ignore.case = TRUE) # output file \\ to avoid regex
 message("Input file : ", basename(ifile), "\nOutput file: ", basename(ofile)) # display file name and output file with full dir name
 message("Output file to directory: ", getwd())
-
-# ==== SET Environment ====
-options(OutDec = ".")     #set decimal point to "."
 
 DType<-CheckDocType(ifile)
 # ==== Process Input file and create output DATAFRAME ====
@@ -137,20 +136,20 @@ if (DType =="BNP") {
   YukiDF <- CreateYukiDF(NROF_Rawrecords)
   YukiDF$IBAN<-BNPRaw$Rekeningnummer
   YukiDF$Valuta<-"EUR"
-  YukiDF$Datum<-gsub("/","-",BNPRaw$Uitvoeringsdatum)
+  YukiDF$Datum<-format(as.Date(BNPRaw$Uitvoeringsdatum, format = "%d/%m/%Y"), "%d-%m-%Y")
+  #YukiDF$Datum<-gsub("/","-",BNPRaw$Uitvoeringsdatum)  # replaced by the line above less efficient more concise
   YukiDF$Rentedatum<-gsub("/","-",BNPRaw$Valutadatum)
   YukiDF$Afschrift<-paste(substr(BNPRaw$Uitvoeringsdatum ,7,11),substr(BNPRaw$Uitvoeringsdatum ,4,5),sep="")
   YukiDF$Naam_tegenrekening<-"" 
   YukiDF$Naam_tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Naam.van.de.tegenpartij[grep("BIC",BNPRaw$Details)]
   YukiDF$Omschrijving<-gsub("BANKREFERENTIE","Ref",gsub("VALUTADATUM ","ValDat",BNPRaw$Details))
-  YukiDF$Naam_tegenrekening[length(BNPRaw$Mededeling)]
   YukiDF$Omschrijving[which(BNPRaw$Mededeling!="")]<-paste(YukiDF$Omschrijving[which(BNPRaw$Mededeling!="")], "/", BNPRaw$Mededeling[which(BNPRaw$Mededeling!="")])
   YukiDF$Bedrag<-BNPRaw$Bedrag
   YukiDF$Tegenrekening<-""
   YukiDF$Tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Tegenpartij[grep("BIC",BNPRaw$Details)]
   # split string in losse woorden en selecteer 9e + 10e woord als tegenpartij voor alle BETALING MET DEBETKAART
-  kaartbetaling_rows <- BNPRaw$Type.verrichting == "Kaartbetaling"
-  YukiDF$Naam_tegenrekening[kaartbetaling_rows] <- paste(
+  kaartbetaling_rows <- BNPRaw$Type.verrichting == "Kaartbetaling"  # logical indexing for rows containing "Kaartbetaling"
+    YukiDF$Naam_tegenrekening[kaartbetaling_rows] <- paste(
     sapply(strsplit(YukiDF$Omschrijving[kaartbetaling_rows], " "), '[', 9),
     sapply(strsplit(YukiDF$Omschrijving[kaartbetaling_rows], " "), '[', 10)
   )
@@ -163,6 +162,8 @@ if (DType =="BNP") {
   # Add name to Card transaction --------
   YukiDF$Omschrijving<-gsub("BETALING MET DEBETKAART NUMMER 4871 04XX XXXX 8706","BETALING MET KAART Nr 4871 xx 8706 (Karin)",YukiDF$Omschrijving)
   YukiDF$Omschrijving<-gsub("BETALING MET DEBETKAART NUMMER 4871 04XX XXXX 7729","BETALING MET KAART Nr 4871 xx 7729 (Arco)",YukiDF$Omschrijving)
+  YukiDF$Omschrijving<-gsub("BETALING MET DEBETKAART NUMMER 4871 04XX XXXX 9449","BETALING MET KAART Nr 4871 xx 9449 (Luis)",YukiDF$Omschrijving)
+  
   }
 if (DType =="REV") {
   REVRaw<-read.csv(ifile, header= TRUE, sep = c(",",";"), quote = "", dec = ".",stringsAsFactors = FALSE)
