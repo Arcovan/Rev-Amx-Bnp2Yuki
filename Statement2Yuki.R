@@ -24,7 +24,6 @@ CheckDocType <- function(x) {
     "BNP" = 13,           # BNP Paribas (Belgiu)
     "JUB" = 6            # Julius Baer
   )
-
   # Read the first line of the file as the header
   header <- tryCatch(readLines(x, n = 1), error = function(e) NULL)
   if (is.null(header)) {stop("Failed to read header from file: ", x)}
@@ -80,10 +79,12 @@ if (ifile == "") {stop("Empty File name [ifile]\n", call. = FALSE)}
 if (file.info(ifile)$size == 0) {stop("File is empty: ", ifile, call. = FALSE)}
 setwd(dirname(ifile))     #set working directory to input directory where file is
 ofile <- sub("\\.csv", "-YukiR\\.csv", ifile, ignore.case = TRUE) # output file \\ to avoid regex
+DType<-CheckDocType(ifile)
+if (DType=="BNP") {
+  ofile <- sub("CSV_", "BNP_", ofile, ignore.case = TRUE) # Adjust name to identify Bank in Name 
+}
 message("Input file : ", basename(ifile), "\nOutput file: ", basename(ofile)) # display file name and output file with full dir name
 message("Output file to directory: ", getwd())
-
-DType<-CheckDocType(ifile)
 # ==== Process Input file and create output DATAFRAME ====
 if (DType =="AMX") {
   AmexRaw <-read.csv(ifile, header = TRUE ,sep = "," , dec = ",", stringsAsFactors = FALSE)   #Reads field as factors or as characters
@@ -251,7 +252,8 @@ if (DType != "UNKNOWN") {
   YukiDF$Omschrijving<-gsub("\\s+", " ", YukiDF$Omschrijving)
   YukiDF$Omschrijving<-gsub("\n","##",YukiDF$Omschrijving)  # Replace line feed in description for 2 hash tags
   View(YukiDF)
-  Smry<-aggregate.data.frame(YukiDF$Bedrag, list(YukiDF$Naam_tegenrekening) ,sum)
+  Smry<-aggregate.data.frame(YukiDF$Bedrag, list(YukiDF$IBAN, YukiDF$Naam_tegenrekening) ,sum)
+  Smry <- Smry[order(Smry$Group.1, decreasing = FALSE), ]
   View(Smry)
   if (exists("FeeDF") ) {message("Totale kosten:",DType,":",sum(FeeDF$Bedrag))}
   aggregate.data.frame(YukiDF$Bedrag, list(substr(YukiDF$Omschrijving,1,2)) ,sum)
