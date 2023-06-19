@@ -20,18 +20,19 @@ CheckDocType <- function(x) {
   )
   doc_nfields <- list(    # nr of fields in Header
     "REV" = 11,           # Revolut Bank
-    "AMX" = 13,           # American Express
+    "AMX" = 12,           # American Express sometimes 13 (category )
     "BNP" = 13,           # BNP Paribas (Belgiu)
     "JUB" = 6            # Julius Baer
   )
   # Read the first line of the file as the header
+  # x<-ifile
   header <- tryCatch(readLines(x, n = 1), error = function(e) NULL)
   if (is.null(header)) {stop("Failed to read header from file: ", x)}
   DocType<-"UNKNOWN"
   header<-readLines(x,skip=0, n = 1)
   NrOfColumns<-length(strsplit(header,"[;,]")[[1]])           # splits header in velden door seperator , of ;
   for (type in names(doc_types)) {
-    if (grepl(doc_types[[type]], header) & (NrOfColumns==doc_nfields[[type]])) {
+    if (grepl(doc_types[type], header)) {
       DocType <- type
       break
     }
@@ -40,6 +41,11 @@ CheckDocType <- function(x) {
     message("Did not understand this header:\n", header, "\n")
     stop("Unknown format: Relevant Keyword not found in header",call. = FALSE)
   }
+  if  (NrOfColumns!=doc_nfields[DocType]) {
+    message("Header from ", DocType, " has incorrect number of columns:",NrOfColumns," should be ",doc_nfields[DocType],"\n","Found HEADER:\"",header,"\"")
+    stop("Incorrect number of columns",call. = FALSE)    
+  }
+    
   message("INPUT format: ", DocType, " based on \"",doc_types[DocType], "\" in header and Nr Columns:", NrOfColumns)
   return(DocType)
 } # check document type based on keywords in header
@@ -76,10 +82,12 @@ if (!(grepl(".csv",basename(ifile),ignore.case = TRUE))) {     # Grepl = grep lo
   stop("Please choose file with extension 'csv'.\n", call. = FALSE)
 }
 if (ifile == "") {stop("Empty File name [ifile]\n", call. = FALSE)}
-if (file.info(ifile)$size == 0) {stop("File is empty: ", ifile, call. = FALSE)}
+if (file.info(ifile)$size <= 90) {
+      stop("File is empty: ", ifile, " ", file.info(ifile)$size, " bytes.", call. = FALSE)
+    } # Smaller than 90 bytes
+DType<-CheckDocType(ifile) # if UNKNOWN then STOP
 setwd(dirname(ifile))     #set working directory to input directory where file is
 ofile <- sub("\\.csv", "-YukiR\\.csv", ifile, ignore.case = TRUE) # output file \\ to avoid regex
-DType<-CheckDocType(ifile)
 if (DType=="BNP") {
   ofile <- sub("CSV_", "BNP_", ofile, ignore.case = TRUE) # Adjust name to identify Bank in Name 
 }
@@ -88,7 +96,7 @@ message("Output file to directory: ", getwd())
 # ==== Process Input file and create output DATAFRAME ====
 if (DType =="AMX") {
   AmexRaw <-read.csv(ifile, header = TRUE ,sep = "," , dec = ",", stringsAsFactors = FALSE)   #Reads field as factors or as characters
-  if (ncol(AmexRaw)!=13) {stop("Aantal kolommen is: ", ncol(AmexRaw), "; Inclusief transactiedetails vergeten aan te vinken.",call. = FALSE)}
+  if (ncol(AmexRaw)!=12) {stop("Aantal kolommen is: ", ncol(AmexRaw), "; Inclusief transactiedetails vergeten aan te vinken.",call. = FALSE)}
   NROF_Rawrecords <- nrow(AmexRaw)
   AmexRaw$Omschrijving <-gsub("\\s+", " ", AmexRaw$Omschrijving) # Replace all instances of double or more spaces with a single space
   AmexRaw$Vermeld.op.uw.rekeningoverzicht.als <-
@@ -159,6 +167,12 @@ if (DType =="BNP") {
     paste(sapply(strsplit(YukiDF$Omschrijving[which(BNPRaw$Type.verrichting=="Geldopname met kaart")]," "),'[',13))
   YukiDF$Naam_tegenrekening[which(YukiDF$Naam_tegenrekening=="8706")]<-"Karin van Leeuwen"
   YukiDF$Naam_tegenrekening[which(YukiDF$Naam_tegenrekening=="7729")]<-"Arco van Nieuwland"
+  # Add name to Direct Debet (Domiciliering) --------------------------------
+  YukiDF$Naam_tegenrekening[which(BNPRaw$Type.verrichting=="Domiciliëring")]<-
+    BNPRaw$Naam.van.de.tegenpartij[which(BNPRaw$Type.verrichting=="Domiciliëring")]
+  YukiDF$Tegenrekening[which(BNPRaw$Type.verrichting=="Domiciliëring")]<-
+    BNPRaw$Tegenpartij[which(BNPRaw$Type.verrichting=="Domiciliëring")]
+
   
   # Add name to Card transaction --------
   YukiDF$Omschrijving<-gsub("BETALING MET DEBETKAART NUMMER 4871 04XX XXXX 8706","BETALING MET KAART Nr 4871 xx 8706 (Karin)",YukiDF$Omschrijving)
