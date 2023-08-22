@@ -3,6 +3,8 @@
 # For AMEX:
 #   Download transactions via https://www.americanexpress.com/
 #   Choose format : CSV and include transaction details
+# For JuliusBaer: 
+#   Download transactions; (selection does not work); import csv in G-sheets; delete old lines and save as CSV
 # Last Edit date:8-may-2023 / Files is managed in Github
 rm(list = ls())  # clear environment
 cat("\014")      # clear console (CLS)
@@ -20,7 +22,7 @@ CheckDocType <- function(x) {
   )
   doc_nfields <- list(    # nr of fields in Header
     "REV" = 11,           # Revolut Bank
-    "AMX" = 12,           # American Express sometimes 13 (category )
+    "AMX" = 13,           # American Express sometimes 13 (category )
     "BNP" = 13,           # BNP Paribas (Belgiu)
     "JUB" = 6            # Julius Baer
   )
@@ -74,7 +76,7 @@ CreateFeeDF <-function(x) {
                        Omschrijving = character(length = x),
                        Bedrag = numeric(length = x))
   return(FeeDF) # return data frame which will be used for export
-}   # Dataframe to split fee from lines
+}   # Data frame to split fee from lines
 
 # ==== Read and Check import file ----------------------------------------
 ifile <- file.choose()    #Select Import file Stop is incorrect
@@ -96,7 +98,7 @@ message("Output file to directory: ", getwd())
 # ==== Process Input file and create output DATAFRAME ====
 if (DType =="AMX") {
   AmexRaw <-read.csv(ifile, header = TRUE ,sep = "," , dec = ",", stringsAsFactors = FALSE)   #Reads field as factors or as characters
-  if (ncol(AmexRaw)!=12) {stop("Aantal kolommen is: ", ncol(AmexRaw), "; Inclusief transactiedetails vergeten aan te vinken.",call. = FALSE)}
+  if (ncol(AmexRaw)!=13) {stop("Aantal kolommen is: ", ncol(AmexRaw), "; Inclusief transactiedetails vergeten aan te vinken.",call. = FALSE)}
   NROF_Rawrecords <- nrow(AmexRaw)
   AmexRaw$Omschrijving <-gsub("\\s+", " ", AmexRaw$Omschrijving) # Replace all instances of double or more spaces with a single space
   AmexRaw$Vermeld.op.uw.rekeningoverzicht.als <-
