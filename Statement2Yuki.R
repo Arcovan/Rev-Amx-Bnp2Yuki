@@ -5,7 +5,9 @@
 #   Choose format : CSV and include transaction details
 # For JuliusBaer: 
 #   Download transactions; (selection does not work); import csv in G-sheets; delete old lines and save as CSV
-# Last Edit date:8-may-2023 / Files is managed in Github
+# For Revolut: Go to browser version en download excel per currency, so seperate file per currency
+# Second last Edit date: 8-may-2023 / Files is managed in Github
+# Last edit: 22-mar-2024 
 rm(list = ls())  # clear environment
 cat("\014")      # clear console (CLS)
 cat("Supported banks: Revolut, Amex, BNP and Julius Baer\n")
@@ -21,7 +23,7 @@ CheckDocType <- function(x) {
     "JUB" = c("Booking")             # Julius Baer
   )
   doc_nfields <- list(    # nr of fields in Header
-    "REV" = 11,           # Revolut Bank
+    "REV" = 10,           # Revolut Bank
     "AMX" = 13,           # American Express sometimes 13 (category )
     "BNP" = 13,           # BNP Paribas (Belgiu)
     "JUB" = 6            # Julius Baer
@@ -93,7 +95,8 @@ ofile <- sub("\\.csv", "-YukiR\\.csv", ifile, ignore.case = TRUE) # output file 
 if (DType=="BNP") {
   ofile <- sub("CSV_", "BNP_", ofile, ignore.case = TRUE) # Adjust name to identify Bank in Name 
 }
-message("Input file : ", basename(ifile), "\nOutput file: ", basename(ofile)) # display file name and output file with full dir name
+message("Input file : ", basename(ifile), "\n", 
+        "Output file: ", basename(ofile)) # display file name and output file with full dir name
 message("Output file to directory: ", getwd())
 # ==== Process Input file and create output DATAFRAME ====
 if (DType =="AMX") {
@@ -146,7 +149,7 @@ if (DType =="BNP") {
   # Create empty data frame
   YukiDF <- CreateYukiDF(NROF_Rawrecords)
   YukiDF$IBAN<-BNPRaw$Rekeningnummer
-  YukiDF$Valuta<-"EUR"
+  YukiDF$Valuta<-BNPRaw$Valuta.rekening
   YukiDF$Datum<-format(as.Date(BNPRaw$Uitvoeringsdatum, format = "%d/%m/%Y"), "%d-%m-%Y")
   #YukiDF$Datum<-gsub("/","-",BNPRaw$Uitvoeringsdatum)  # replaced by the line above less efficient more concise
   YukiDF$Rentedatum<-gsub("/","-",BNPRaw$Valutadatum)
@@ -157,7 +160,8 @@ if (DType =="BNP") {
   YukiDF$Omschrijving[which(BNPRaw$Mededeling!="")]<-paste(YukiDF$Omschrijving[which(BNPRaw$Mededeling!="")], "/", BNPRaw$Mededeling[which(BNPRaw$Mededeling!="")])
   YukiDF$Bedrag<-BNPRaw$Bedrag
   YukiDF$Tegenrekening<-""
-  YukiDF$Tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Tegenpartij[grep("BIC",BNPRaw$Details)]
+  YukiDF$Tegenrekening<-BNPRaw$Tegenpartij   #recently added since field seems properly filled
+  # YukiDF$Tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Tegenpartij[grep("BIC",BNPRaw$Details)]
   # split string in losse woorden en selecteer 9e + 10e woord als tegenpartij voor alle BETALING MET DEBETKAART
   kaartbetaling_rows <- BNPRaw$Type.verrichting == "Kaartbetaling"  # logical indexing for rows containing "Kaartbetaling"
     YukiDF$Naam_tegenrekening[kaartbetaling_rows] <- paste(
@@ -186,14 +190,22 @@ if (DType =="REV") {
   REVRaw<-read.csv(ifile, header= TRUE, sep = c(",",";"), quote = "", dec = ".",stringsAsFactors = FALSE)
   NROF_Rawrecords <- nrow(REVRaw)
   REVRaw$Details <- gsub("\\s+", " ", REVRaw$Description) # Replace all instances of double or more spaces with a single space
+  curreny <-REVRaw$Currency[1]
+  ofile <- sub("account-statement", paste("REV-", curreny, sep = "") , ofile, ignore.case = TRUE) # Adjust name to identify Bank in Name and curr
+  ofile <- sub("_nl-nl", "",ofile, ignore.case = TRUE)
+  cat("Output file: ", basename(ofile), "\n") # display file name and output file with full dir name
   View(REVRaw)
   aggregate.data.frame(REVRaw$Amount, list(REVRaw$Type) ,sum)
   # Create empty data frame
   YukiDF <- CreateYukiDF(NROF_Rawrecords) # create DF for output with same nr of rows
   YukiDF$IBAN<-paste("LT773250030128232439",REVRaw$Currency,sep = "") #hardcoded IBAN since not in FILE
   YukiDF$Valuta<-REVRaw$Currency
-  YukiDF$Datum<-  format(as.Date(REVRaw$Completed.Date, "%Y-%m-%d"),format ="%d-%m-%Y")
   YukiDF$Rentedatum<-format(as.Date(REVRaw$Started.Date, "%Y-%m-%d"),format ="%d-%m-%Y")
+  YukiDF$Datum<-format(as.Date(REVRaw$Completed.Date, "%Y-%m-%d"),format ="%d-%m-%Y")
+  if (length(which(nchar(REVRaw$Completed.Date)==0))>0) {
+    YukiDF$Datum[which(nchar(REVRaw$Completed.Date)==0)] <- YukiDF$Rentedatum[which(nchar(REVRaw$Completed.Date)==0)]
+    cat("Date corrected:", YukiDF$Rentedatum[which(nchar(REVRaw$Completed.Date)==0)],"\n" )
+  }
   YukiDF$Afschrift<-paste(substr(YukiDF$Datum ,7,11),substr(YukiDF$Datum ,4,5),sep="")
   YukiDF$Omschrijving<-paste(REVRaw$Type,":",REVRaw$Description)
   YukiDF$Bedrag<-REVRaw$Amount
@@ -270,9 +282,15 @@ if (DType != "UNKNOWN") {
   View(YukiDF)
   Smry<-aggregate.data.frame(YukiDF$Bedrag, list(YukiDF$IBAN, YukiDF$Naam_tegenrekening) ,sum)
   Smry <- Smry[order(Smry$Group.1, decreasing = FALSE), ]
+  colnames(Smry) <- c("IBAN", "Account Name", "Total")  # Replace with your desired names
+  
   View(Smry)
   if (exists("FeeDF") ) {message("Totale kosten:",DType,":",sum(FeeDF$Bedrag))}
   aggregate.data.frame(YukiDF$Bedrag, list(substr(YukiDF$Omschrijving,1,2)) ,sum)
+  if (any(is.na(YukiDF))) {
+    cat("Incorrect field found. CSV will not be saved.")
+    stop("One of the value in dataframe YukiDF has value: NA")
+  }
   ColumnNames <-
     c(
       "IBAN",
@@ -297,4 +315,4 @@ if (DType != "UNKNOWN") {
   message("File Created from: ", DType, " Nof Raw Records: ", NROF_Rawrecords," Total Records created:",nrow(YukiDF), " Amount: ",formatC(sum(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2))
   cat("Highest amount: ",formatC(min(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2))
 
-} #s Recognised document so write output file
+} #Recognised document so write output file
