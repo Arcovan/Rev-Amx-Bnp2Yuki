@@ -7,7 +7,7 @@
 #   Download transactions; (selection does not work); import csv in G-sheets; delete old lines and save as CSV
 # For Revolut: Go to browser version en download excel per currency, so seperate file per currency
 # Second last Edit date: 8-may-2023 / Files is managed in Github
-# Last edit: 22-mar-2024 
+# Last edit: 2-Apr-2024 
 rm(list = ls())  # clear environment
 cat("\014")      # clear console (CLS)
 cat("Supported banks: Revolut, Amex, BNP and Julius Baer\n")
@@ -313,6 +313,6 @@ if (DType != "UNKNOWN") {
     col.names = ColumnNames  # Vanwege de underscore in de header die geen spatie kan zijn
   ) 
   message("File Created from: ", DType, " Nof Raw Records: ", NROF_Rawrecords," Total Records created:",nrow(YukiDF), " Amount: ",formatC(sum(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2))
-  cat("Highest amount: ",formatC(min(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2))
-
+  cat("Highest amount: ",formatC(min(YukiDF$Bedrag) , format="f", big.mark = ",",digits=2),
+      "Supplier:", YukiDF$Naam_tegenrekening[which.min(YukiDF$Bedrag)])
 } #Recognised document so write output file
