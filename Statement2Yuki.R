@@ -7,15 +7,21 @@
 #   Download transactions; (selection does not work); import csv in G-sheets; delete old lines and save as CSV
 # For Revolut: Go to browser version en download excel per currency, so seperate file per currency
 # Second last Edit date: 8-may-2023 / Files is managed in Github
-# Last edit: 2-Apr-2024 
+# added Saxo bank via XLSx (https://www.saxoinvestor.nl/)
+# Last edit: 27-Apr-2024 
 rm(list = ls())  # clear environment
 cat("\014")      # clear console (CLS)
 cat("Supported banks: Revolut, Amex, BNP and Julius Baer\n")
 # ==== SET Environment ====
 options(OutDec = ".")     #set decimal point to "."
 options(scipen = 999)     # avoid scientific notation for large amounts
+# Installeer het readxl-pakket indien nodig
+install.packages("readxl")
+# Laad het readxl-pakket
+library(readxl)
 # ===== Define Functions --------------------------------------------------
 CheckDocType <- function(x) {
+  # x = ifile
   doc_types <- list(                # fields used to check which file format is presented
     "REV" = c("Product"),            # Revolut Bank
     "AMX" = c("Kaartlid"),           # American Express
@@ -49,7 +55,6 @@ CheckDocType <- function(x) {
     message("Header from ", DocType, " has incorrect number of columns:",NrOfColumns," should be ",doc_nfields[DocType],"\n","Found HEADER:\"",header,"\"")
     stop("Incorrect number of columns",call. = FALSE)    
   }
-    
   message("INPUT format: ", DocType, " based on \"",doc_types[DocType], "\" in header and Nr Columns:", NrOfColumns)
   return(DocType)
 } # check document type based on keywords in header
@@ -82,16 +87,26 @@ CreateFeeDF <-function(x) {
 
 # ==== Read and Check import file ----------------------------------------
 ifile <- file.choose()    #Select Import file Stop is incorrect
-if (!(grepl(".csv",basename(ifile),ignore.case = TRUE))) {     # Grepl = grep logical
-  stop("Please choose file with extension 'csv'.\n", call. = FALSE)
-}
 if (ifile == "") {stop("Empty File name [ifile]\n", call. = FALSE)}
 if (file.info(ifile)$size <= 90) {
-      stop("File is empty: ", ifile, " ", file.info(ifile)$size, " bytes.", call. = FALSE)
-    } # Smaller than 90 bytes
-DType<-CheckDocType(ifile) # if UNKNOWN then STOP
+  stop("File is empty: ", ifile, " ", file.info(ifile)$size, " bytes.", call. = FALSE)
+} # Smaller than 90 bytes
+FileTypeXls<-grepl(".xls",basename(ifile),ignore.case = TRUE)  # Grepl = grep logical
+FileTypeCSV<-grepl(".csv",basename(ifile),ignore.case = TRUE)
+if (!(FileTypeCSV | FileTypeXls )) {    
+  stop("Please choose file with extension 'csv' or 'xls'.\n", call. = FALSE)
+}
 setwd(dirname(ifile))     #set working directory to input directory where file is
-ofile <- sub("\\.csv", "-YukiR\\.csv", ifile, ignore.case = TRUE) # output file \\ to avoid regex
+if (FileTypeXls) {
+  # Lees het XLSX-bestand in een data frame
+  DType <- "SAX"
+  ofile <- sub("\\.xlsx", "-YukiR\\.csv", ifile, ignore.case = TRUE) # output file \\ to avoid regex
+  ofile <- sub("transactions", DType, ifile, ignore.case = TRUE) # output file \\ to avoid regex
+  
+}
+if (FileTypeCSV) {
+  DType<-CheckDocType(ifile) # if UNKNOWN then STOP
+}
 if (DType=="BNP") {
   ofile <- sub("CSV_", "BNP_", ofile, ignore.case = TRUE) # Adjust name to identify Bank in Name 
 }
@@ -274,6 +289,25 @@ if (DType =="JUB") {
           sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT FROM",YukiDF$Omschrijving)]," "),'[',6))
   YukiDF$Bedrag<-JUBRaw$Credit-JUBRaw$Debit
 }
+if (DType =="SAX") {
+  SaxoRaw<-read_excel(ifile)
+  View(SaxoRaw)
+  NROF_Rawrecords <- nrow(SaxoRaw)
+  YukiDF <- CreateYukiDF(NROF_Rawrecords) # Create empty data frame
+  YukiDF$IBAN <- "NL50BICK0253616360"      # Saxo works with customer ID 13782606 and Account : 69900/3616360EUR and IBAN
+  YukiDF$Valuta<-"EUR"                    # not defined yet from file
+  YukiDF$Afschrift <- format(as.Date(SaxoRaw$Valutadatum, "%d-%b-%Y"),format ="%Y%d") # Afschrift (staementnr) equals yyyymm
+  YukiDF$Rentedatum<- format(as.Date(SaxoRaw$Valutadatum, "%d-%b-%Y"),format ="%d-%m-%Y")
+  YukiDF$Datum<- format(as.Date(SaxoRaw$Transactiedatum, "%d-%b-%Y"),format ="%d-%m-%Y")
+  YukiDF$Tegenrekening<-""
+  YukiDF$Naam_tegenrekening <- ifelse(is.na(SaxoRaw$Instrument),"",SaxoRaw$Instrument)
+  YukiDF$Omschrijving <- 
+    ifelse(is.na(SaxoRaw$Instrumentsymbool),
+           SaxoRaw$Acties,
+           paste(SaxoRaw$Acties, "ISIN:", SaxoRaw$`Instrument ISIN`, "Sym:", SaxoRaw$Instrumentsymbool, SaxoRaw$Instrumentvaluta)
+    )
+  YukiDF$Bedrag<- SaxoRaw$Aantal
+}
 # ==== Post processing and Write output file ====
 if (DType != "UNKNOWN") {
   YukiDF$Naam_tegenrekening<-gsub("\\s+", " ", YukiDF$Naam_tegenrekening)
@@ -290,7 +324,7 @@ if (DType != "UNKNOWN") {
   if (any(is.na(YukiDF))) {
     cat("Incorrect field found. CSV will not be saved.")
     stop("One of the value in dataframe YukiDF has value: NA")
-  }
+  } # Stop
   ColumnNames <-
     c(
       "IBAN",
