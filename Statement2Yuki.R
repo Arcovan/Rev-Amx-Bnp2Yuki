@@ -7,8 +7,8 @@
 #   Download transactions; (selection does not work); import csv in G-sheets; delete old lines and save as CSV
 # For Revolut: Go to browser version en download excel per currency, so seperate file per currency
 # Second last Edit date: 8-may-2023 / Files is managed in Github
-# added Saxo bank via XLSx (https://www.saxoinvestor.nl/)
-# Last edit: 27-Apr-2024 
+# added Saxo bank via XLSx
+# Last edit: 28-Apr-2024 
 rm(list = ls())  # clear environment
 cat("\014")      # clear console (CLS)
 cat("Supported banks: Revolut, Amex, BNP and Julius Baer\n")
@@ -102,7 +102,6 @@ if (FileTypeXls) {
   DType <- "SAX"
   ofile <- sub("\\.xlsx", "-YukiR\\.csv", ifile, ignore.case = TRUE) # output file \\ to avoid regex
   ofile <- sub("transactions", DType, ifile, ignore.case = TRUE) # output file \\ to avoid regex
-  
 }
 if (FileTypeCSV) {
   DType<-CheckDocType(ifile) # if UNKNOWN then STOP
@@ -292,21 +291,36 @@ if (DType =="JUB") {
 if (DType =="SAX") {
   SaxoRaw<-read_excel(ifile)
   View(SaxoRaw)
+  SameHeader <- length (grep("Boekingsbedrag|Valutadatum|Transactiedatum|Instrument|Acties|Instrumentsymbool|Instrument ISIN|Instrumentvaluta",names(SaxoRaw)))==8
+  stopifnot(SameHeader)
+  
   NROF_Rawrecords <- nrow(SaxoRaw)
-  YukiDF <- CreateYukiDF(NROF_Rawrecords) # Create empty data frame
+  
+  YukiDF <- CreateYukiDF(NROF_Rawrecords)  # Create empty data frame
   YukiDF$IBAN <- "NL50BICK0253616360"      # Saxo works with customer ID 13782606 and Account : 69900/3616360EUR and IBAN
-  YukiDF$Valuta<-"EUR"                    # not defined yet from file
-  YukiDF$Afschrift <- format(as.Date(SaxoRaw$Valutadatum, "%d-%b-%Y"),format ="%Y%d") # Afschrift (staementnr) equals yyyymm
+  YukiDF$Valuta<-"EUR"                     # not defined yet from file so hard coded
+  YukiDF$Afschrift <- format(as.Date(SaxoRaw$Transactiedatum, "%d-%b-%Y"),format ="%Y%m")     # Afschrift (statementnr) equals yyyymm
   YukiDF$Rentedatum<- format(as.Date(SaxoRaw$Valutadatum, "%d-%b-%Y"),format ="%d-%m-%Y")
   YukiDF$Datum<- format(as.Date(SaxoRaw$Transactiedatum, "%d-%b-%Y"),format ="%d-%m-%Y")
   YukiDF$Tegenrekening<-""
+  
   YukiDF$Naam_tegenrekening <- ifelse(is.na(SaxoRaw$Instrument),"",SaxoRaw$Instrument)
+  SaxoRecords <- grep("Rente|Service fee",SaxoRaw$Acties)
+  YukiDF$Naam_tegenrekening[SaxoRecords] <- "Saxo Bank"
+  
   YukiDF$Omschrijving <- 
     ifelse(is.na(SaxoRaw$Instrumentsymbool),
            SaxoRaw$Acties,
            paste(SaxoRaw$Acties, "ISIN:", SaxoRaw$`Instrument ISIN`, "Sym:", SaxoRaw$Instrumentsymbool, SaxoRaw$Instrumentvaluta)
     )
-  YukiDF$Bedrag<- SaxoRaw$Aantal
+  DividendRecords<-grep("Dividend",YukiDF$Omschrijving)
+  YukiDF$Omschrijving[DividendRecords] <- paste(YukiDF$Omschrijving[DividendRecords], 
+                                               "Ingehouden dividendbelasting 15%:", 
+                                               as.character(round(YukiDF$Bedrag[DividendRecords] /0.85 * 0.15, 2))
+                                               )
+  YukiDF$Omschrijving[grep("Service fee",YukiDF$Omschrijving)]<- paste(YukiDF$Omschrijving[grep("Service fee",YukiDF$Omschrijving)], "Green 0,08% * Portefeuille /12")
+  
+  YukiDF$Bedrag<- SaxoRaw$Boekingsbedrag # before 2022 SaxoRaw$Aantal
 }
 # ==== Post processing and Write output file ====
 if (DType != "UNKNOWN") {
