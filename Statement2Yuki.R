@@ -16,7 +16,7 @@ cat("Supported banks: Revolut, Amex, BNP and Julius Baer\n")
 options(OutDec = ".")     #set decimal point to "."
 options(scipen = 999)     # avoid scientific notation for large amounts
 # Installeer het readxl-pakket indien nodig
-install.packages("readxl")
+# install.packages("readxl")
 # Laad het readxl-pakket
 library(readxl)
 # ===== Define Functions --------------------------------------------------
@@ -101,7 +101,7 @@ if (FileTypeXls) {
   # Lees het XLSX-bestand in een data frame
   DType <- "SAX"
   ofile <- sub("\\.xlsx", "-YukiR\\.csv", ifile, ignore.case = TRUE) # output file \\ to avoid regex
-  ofile <- sub("transactions", DType, ifile, ignore.case = TRUE) # output file \\ to avoid regex
+  ofile <- sub("transactions", DType, ofile, ignore.case = TRUE) # output file \\ to avoid regex
 }
 if (FileTypeCSV) {
   DType<-CheckDocType(ifile) # if UNKNOWN then STOP
