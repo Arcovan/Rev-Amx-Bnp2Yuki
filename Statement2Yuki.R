@@ -9,6 +9,7 @@
 # Second last Edit date: 8-may-2023 / Files is managed in Github
 # added Saxo bank via XLSx
 # Last edit: 28-Apr-2024 
+# TODO: dir(dir_csv, pattern = "*.csv") process all file in directory
 rm(list = ls())  # clear environment
 cat("\014")      # clear console (CLS)
 cat("Supported banks: Revolut, Amex, BNP and Julius Baer\n")
@@ -105,6 +106,7 @@ if (FileTypeXls) {
 }
 if (FileTypeCSV) {
   DType<-CheckDocType(ifile) # if UNKNOWN then STOP
+  ofile <- sub("\\.csv", "-YukiR\\.csv", ifile, ignore.case = TRUE) # output file \\ to avoid regex
 }
 if (DType=="BNP") {
   ofile <- sub("CSV_", "BNP_", ofile, ignore.case = TRUE) # Adjust name to identify Bank in Name 
@@ -206,7 +208,7 @@ if (DType =="REV") {
   REVRaw$Details <- gsub("\\s+", " ", REVRaw$Description) # Replace all instances of double or more spaces with a single space
   curreny <-REVRaw$Currency[1]
   ofile <- sub("account-statement", paste("REV-", curreny, sep = "") , ofile, ignore.case = TRUE) # Adjust name to identify Bank in Name and curr
-  ofile <- sub("_nl-nl", "",ofile, ignore.case = TRUE)
+  ofile <- sub("_en-gb", "",ofile, ignore.case = TRUE)
   cat("Output file: ", basename(ofile), "\n") # display file name and output file with full dir name
   View(REVRaw)
   aggregate.data.frame(REVRaw$Amount, list(REVRaw$Type) ,sum)
@@ -225,6 +227,7 @@ if (DType =="REV") {
   YukiDF$Bedrag<-REVRaw$Amount
   YukiDF$Omschrijving[which(REVRaw$Fee!=0)]<-paste(YukiDF$Omschrijving[which(REVRaw$Fee!=0)],"FEE:",REVRaw$Fee[which(REVRaw$Fee!=0)])
   YukiDF$Naam_tegenrekening<-""
+  YukiDF$Naam_tegenrekening[which(REVRaw$Type=="EXCHANGE")]<-"Arco van Nieuwland"
   YukiDF$Naam_tegenrekening[which(REVRaw$Type=="CASHBACK")]<-"Revolut"
   YukiDF$Naam_tegenrekening[which(REVRaw$Type=="CARD_PAYMENT")]<-REVRaw$Description[which(REVRaw$Type=="CARD_PAYMENT")]
   YukiDF$Naam_tegenrekening[which(REVRaw$Type=="TRANSFER")]<-REVRaw$Description[which(REVRaw$Type=="TRANSFER")]
@@ -251,6 +254,7 @@ if (DType =="JUB") {
   NROF_Rawrecords <- nrow(JUBRaw)
   JUBRaw$Booking.text <- gsub("\\s+", " ", JUBRaw$Booking.text) # Replace all instances of double or more spaces with a single space
   Currency<-substr(colnames(JUBRaw)[6],9,12)
+  ofile <- sub("Statement", paste0(DType,"-",Currency), ofile, ignore.case = TRUE) # output file \\ to avoid regex
   colnames(JUBRaw)[6]<-"Balance"
   # after following operation RAW is not RAW anymore ;)
   # prepare amounts JB delivers funny format with quotes as thousand seperator
@@ -279,13 +283,17 @@ if (DType =="JUB") {
                                       paste(substr(YukiDF$Omschrijving, 43, 60)),
                                       YukiDF$Naam_tegenrekening)
   YukiDF$Naam_tegenrekening[grep("ALL-INCLUSIVE FEE",YukiDF$Omschrijving)]<-"Julius Baer"
-  YukiDF$Naam_tegenrekening[grep("PAYMENT TO",YukiDF$Omschrijving)]<-
-  paste(sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT TO",YukiDF$Omschrijving)]," "),'[',4),
-        sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT TO",YukiDF$Omschrijving)]," "),'[',5))
-  YukiDF$Naam_tegenrekening[grep("PAYMENT FROM",YukiDF$Omschrijving)]<-
-    paste(sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT FROM",YukiDF$Omschrijving)]," "),'[',4),
-          sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT FROM",YukiDF$Omschrijving)]," "),'[',5),
-          sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT FROM",YukiDF$Omschrijving)]," "),'[',6))
+  
+  YukiDF$Naam_tegenrekening[grep("PAYMENT TO",YukiDF$Omschrijving)]<-sub("PAYMENT TO BPS\\d{12}", "", YukiDF$Omschrijving[grep("PAYMENT TO",YukiDF$Omschrijving)])
+  #YukiDF$Naam_tegenrekening[grep("PAYMENT TO",YukiDF$Omschrijving)]<-
+  #paste(sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT TO",YukiDF$Omschrijving)]," "),'[',4),
+  #      sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT TO",YukiDF$Omschrijving)]," "),'[',5))
+  
+  YukiDF$Naam_tegenrekening[grep("PAYMENT FROM",YukiDF$Omschrijving)]<-sub("PAYMENT FROM BPS\\d{12}", "", YukiDF$Omschrijving[grep("PAYMENT FROM",YukiDF$Omschrijving)])
+  #YukiDF$Naam_tegenrekening[grep("PAYMENT FROM",YukiDF$Omschrijving)]<-
+  #  paste(sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT FROM",YukiDF$Omschrijving)]," "),'[',4),
+  #        sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT FROM",YukiDF$Omschrijving)]," "),'[',5),
+  #        sapply(strsplit(YukiDF$Omschrijving[grep("PAYMENT FROM",YukiDF$Omschrijving)]," "),'[',6))
   YukiDF$Bedrag<-JUBRaw$Credit-JUBRaw$Debit
 }
 if (DType =="SAX") {
@@ -297,9 +305,16 @@ if (DType =="SAX") {
   NROF_Rawrecords <- nrow(SaxoRaw)
   
   YukiDF <- CreateYukiDF(NROF_Rawrecords)  # Create empty data frame
-  YukiDF$IBAN <- "NL50BICK0253616360"      # Saxo works with customer ID 13782606 and Account : 69900/3616360EUR and IBAN
-  YukiDF$Valuta<-"EUR"                     # not defined yet from file so hard coded
-  YukiDF$Afschrift <- format(as.Date(SaxoRaw$Transactiedatum, "%d-%b-%Y"),format ="%Y%m")     # Afschrift (statementnr) equals yyyymm
+  SaxoCur <- SaxoRaw$Instrumentvaluta[grep("1", SaxoRaw$Omrekeningskoers)][1]
+  if (is.na(SaxoCur)) {
+    stop("no currency found [line300]")
+    }
+  switch (SaxoCur,
+          "EUR" = YukiDF$IBAN <- "NL50BICK0253616360",      # Saxo works with customer ID 13782606 and Account : 69900/3616360EUR and IBAN
+          "USD" = YukiDF$IBAN <- "NL90BICK3616360424",
+          )
+  YukiDF$Valuta<- SaxoCur
+  YukiDF$Afschrift <- format(as.Date(SaxoRaw$Transactiedatum, "%d-%b-%Y"),format ="%Y%m")     # Afschrift (statement) equals yyyymm
   YukiDF$Rentedatum<- format(as.Date(SaxoRaw$Valutadatum, "%d-%b-%Y"),format ="%d-%m-%Y")
   YukiDF$Datum<- format(as.Date(SaxoRaw$Transactiedatum, "%d-%b-%Y"),format ="%d-%m-%Y")
   YukiDF$Tegenrekening<-""
@@ -316,10 +331,10 @@ if (DType =="SAX") {
   DividendRecords<-grep("Dividend",YukiDF$Omschrijving)
   YukiDF$Omschrijving[DividendRecords] <- paste(YukiDF$Omschrijving[DividendRecords], 
                                                "Ingehouden dividendbelasting 15%:", 
-                                               as.character(round(YukiDF$Bedrag[DividendRecords] /0.85 * 0.15, 2))
+                                               as.character(round(SaxoRaw$Boekingsbedrag[DividendRecords] /0.85 * 0.15, 2))
                                                )
   YukiDF$Omschrijving[grep("Service fee",YukiDF$Omschrijving)]<- paste(YukiDF$Omschrijving[grep("Service fee",YukiDF$Omschrijving)], "Green 0,08% * Portefeuille /12")
-  
+
   YukiDF$Bedrag<- SaxoRaw$Boekingsbedrag # before 2022 SaxoRaw$Aantal
 }
 # ==== Post processing and Write output file ====
