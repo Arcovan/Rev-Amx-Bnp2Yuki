@@ -8,7 +8,10 @@
 # For Revolut: Go to browser version en download excel per currency, so seperate file per currency
 # Second last Edit date: 8-may-2023 / Files is managed in Github
 # added Saxo bank via XLSx
-# Last edit: 28-Apr-2024 
+# added Mastercard BNP transaction recognistion
+# added Julius USD account
+# added recognize voided transaction in Revolut
+# Last edit: 24-sep-2024 
 # TODO: dir(dir_csv, pattern = "*.csv") process all file in directory
 rm(list = ls())  # clear environment
 cat("\014")      # clear console (CLS)
@@ -194,7 +197,8 @@ if (DType =="BNP") {
     BNPRaw$Naam.van.de.tegenpartij[which(BNPRaw$Type.verrichting=="Domiciliëring")]
   YukiDF$Tegenrekening[which(BNPRaw$Type.verrichting=="Domiciliëring")]<-
     BNPRaw$Tegenpartij[which(BNPRaw$Type.verrichting=="Domiciliëring")]
-
+  
+  YukiDF$Naam_tegenrekening[which(BNPRaw$Type.verrichting=="Kredietkaartbetaling")]<-"MASTERCARD BNP"
   
   # Add name to Card transaction --------
   YukiDF$Omschrijving<-gsub("BETALING MET DEBETKAART NUMMER 4871 04XX XXXX 8706","BETALING MET KAART Nr 4871 xx 8706 (Karin)",YukiDF$Omschrijving)
@@ -224,7 +228,9 @@ if (DType =="REV") {
   }
   YukiDF$Afschrift<-paste(substr(YukiDF$Datum ,7,11),substr(YukiDF$Datum ,4,5),sep="")
   YukiDF$Omschrijving<-paste(REVRaw$Type,":",REVRaw$Description)
+  YukiDF$Bedrag<-0
   YukiDF$Bedrag<-REVRaw$Amount
+  YukiDF$Bedrag[which(REVRaw$State!="COMPLETED")]<-0
   YukiDF$Omschrijving[which(REVRaw$Fee!=0)]<-paste(YukiDF$Omschrijving[which(REVRaw$Fee!=0)],"FEE:",REVRaw$Fee[which(REVRaw$Fee!=0)])
   YukiDF$Naam_tegenrekening<-""
   YukiDF$Naam_tegenrekening[which(REVRaw$Type=="EXCHANGE")]<-"Arco van Nieuwland"
@@ -233,19 +239,20 @@ if (DType =="REV") {
   YukiDF$Naam_tegenrekening[which(REVRaw$Type=="TRANSFER")]<-REVRaw$Description[which(REVRaw$Type=="TRANSFER")]
   YukiDF$Naam_tegenrekening[which(substr(YukiDF$Naam_tegenrekening,1,3)=="To ")]<-paste(substr(YukiDF$Naam_tegenrekening[which(substr(YukiDF$Naam_tegenrekening,1,3)=="To ")],4,25))
   YukiDF$Naam_tegenrekening[which(REVRaw$Type=="TOPUP")]<-substr(REVRaw$Description[which(REVRaw$Type=="TOPUP")],14,35)
-  FeeRecords<-nrow(REVRaw[REVRaw$Fee!=0,]) #number of records containing a Fee (transaction cost)
+  FeeRecords<-sum(REVRaw$Fee != 0 & REVRaw$State == "COMPLETED") #number of records containing a Fee (transaction cost)
+  
   if (FeeRecords>0) {
     FeeDF<-CreateFeeDF(FeeRecords)
     FeeDF$IBAN<-paste("LT773250030128232439",REVRaw$Currency[1],sep = "")
     FeeDF$Valuta <-REVRaw$Currency[1]
     FeeDF$Naam_tegenrekening<-"Revolut"
-    FeeDF$Rentedatum<-format(as.Date(REVRaw$Completed.Date[REVRaw$Fee!=0],"%Y-%m-%d"),format ="%d-%m-%Y")
-    FeeDF$Datum<-format(as.Date(REVRaw$Started.Date[REVRaw$Fee!=0],"%Y-%m-%d"),format ="%d-%m-%Y")
-    FeeDF$Bedrag<--REVRaw$Fee[REVRaw$Fee!=0]
-    FeeDF$Afschrift<-YukiDF$Afschrift[REVRaw$Fee!=0]
-    FeeDF$Omschrijving<-paste("[FEE:]",REVRaw$Description[REVRaw$Fee!=0])
+    FeeDF$Rentedatum<-format(as.Date(REVRaw$Completed.Date[REVRaw$Fee!=0 & REVRaw$State=="COMPLETED" ],"%Y-%m-%d"),format ="%d-%m-%Y")
+    FeeDF$Datum<-format(as.Date(REVRaw$Started.Date[REVRaw$Fee!=0 & REVRaw$State=="COMPLETED"],"%Y-%m-%d"),format ="%d-%m-%Y")
+    FeeDF$Bedrag<--REVRaw$Fee[REVRaw$Fee!=0 & REVRaw$State=="COMPLETED"]
+    FeeDF$Afschrift<-YukiDF$Afschrift[REVRaw$Fee!=0 & REVRaw$State=="COMPLETED"]
+    FeeDF$Omschrijving<-paste("[FEE:]",REVRaw$Description[REVRaw$Fee!=0 & REVRaw$State=="COMPLETED"])
     View(FeeDF)
-    message("Fee Split in seperate Records: ",FeeRecords, " Fee Amount: ",sum(FeeDF$Bedrag))
+    message("Fee Split in seperate Records: ",FeeRecords, " Fee Amount:  ",sum(FeeDF$Bedrag))
     YukiDF<-rbind(YukiDF,FeeDF)
     } #Split fee to separate records
 } 
@@ -270,7 +277,7 @@ if (DType =="JUB") {
   switch (Currency,
           "CHF" = YukiDF$IBAN<-"CH1108515052916502001",
           "EUR" = YukiDF$IBAN<-"CH8108515052916502002",
-          "USD" = YukiDF$IBAN<-"USD",
+          "USD" = YukiDF$IBAN<-"CH2708515052916502004",
           " " = stop("Unknown currency: Relevant Keyword not found in header",call. = FALSE)
   )
   YukiDF$Valuta<-Currency
@@ -283,6 +290,7 @@ if (DType =="JUB") {
                                       paste(substr(YukiDF$Omschrijving, 43, 60)),
                                       YukiDF$Naam_tegenrekening)
   YukiDF$Naam_tegenrekening[grep("ALL-INCLUSIVE FEE",YukiDF$Omschrijving)]<-"Julius Baer"
+  YukiDF$Naam_tegenrekening[grep("Interest",YukiDF$Omschrijving, ignore.case = TRUE)]<-"Julius Baer"
   
   YukiDF$Naam_tegenrekening[grep("PAYMENT TO",YukiDF$Omschrijving)]<-sub("PAYMENT TO BPS\\d{12}", "", YukiDF$Omschrijving[grep("PAYMENT TO",YukiDF$Omschrijving)])
   #YukiDF$Naam_tegenrekening[grep("PAYMENT TO",YukiDF$Omschrijving)]<-
