@@ -5,14 +5,14 @@
 #   Choose format : CSV and include transaction details
 # For JuliusBaer: 
 #   Download transactions; (selection does not work); import csv in G-sheets; delete old lines and save as CSV
-# For Revolut: Go to browser version en download excel per currency, so seperate file per currency
+# For Revolut: Go to browser version en download excel per currency, so separete file per currency
 # Second last Edit date: 8-may-2023 / Files is managed in Github
 # added Saxo bank via XLSx
-# added Mastercard BNP transaction recognistion
+# added Mastercard BNP transaction recognition
 # added Julius USD account
-# added recognize voided transaction in Revolut
-# Last edit: 24-sep-2024 
+# Last edit: 15-oct-2024 
 # TODO: dir(dir_csv, pattern = "*.csv") process all file in directory
+
 rm(list = ls())  # clear environment
 cat("\014")      # clear console (CLS)
 cat("Supported banks: Revolut, Amex, BNP and Julius Baer\n")
@@ -78,14 +78,14 @@ CreateYukiDF <-function(x) {
 CreateFeeDF <-function(x) {
   # x = nr of records to be created
   FeeDF <- data.frame(IBAN = character(length = x),
-                       Valuta = character(length = x),
-                       Afschrift = integer(length = x),
-                       Datum = character(length = x),
-                       Rentedatum = character(length = x),
-                       Tegenrekening = character(length = x),
-                       Naam_tegenrekening = character(length = x),
-                       Omschrijving = character(length = x),
-                       Bedrag = numeric(length = x))
+                      Valuta = character(length = x),
+                      Afschrift = integer(length = x),
+                      Datum = character(length = x),
+                      Rentedatum = character(length = x),
+                      Tegenrekening = character(length = x),
+                      Naam_tegenrekening = character(length = x),
+                      Omschrijving = character(length = x),
+                      Bedrag = numeric(length = x))
   return(FeeDF) # return data frame which will be used for export
 }   # Data frame to split fee from lines
 
@@ -117,7 +117,7 @@ if (DType=="BNP") {
 message("Input file : ", basename(ifile), "\n", 
         "Output file: ", basename(ofile)) # display file name and output file with full dir name
 message("Output file to directory: ", getwd())
-# ==== Process Input file and create output DATAFRAME ====
+# ==== Process Input file and create output DATAFRAME ----
 if (DType =="AMX") {
   AmexRaw <-read.csv(ifile, header = TRUE ,sep = "," , dec = ",", stringsAsFactors = FALSE)   #Reads field as factors or as characters
   if (ncol(AmexRaw)!=13) {stop("Aantal kolommen is: ", ncol(AmexRaw), "; Inclusief transactiedetails vergeten aan te vinken.",call. = FALSE)}
@@ -158,7 +158,7 @@ if (DType =="AMX") {
     View(FeeDF)
     message("Fee Split in seperate Records: ",FeeRecords, " Fee Amount: ",sum(FeeDF$Bedrag))
     YukiDF<-rbind(YukiDF,FeeDF)
-   }
+  }
 }
 if (DType =="BNP") {
   BNPRaw<-read.csv(ifile, header= TRUE, sep = ";", quote = "", dec = ",",stringsAsFactors = FALSE)
@@ -183,7 +183,7 @@ if (DType =="BNP") {
   # YukiDF$Tegenrekening[grep("BIC",BNPRaw$Details)]<-BNPRaw$Tegenpartij[grep("BIC",BNPRaw$Details)]
   # split string in losse woorden en selecteer 9e + 10e woord als tegenpartij voor alle BETALING MET DEBETKAART
   kaartbetaling_rows <- BNPRaw$Type.verrichting == "Kaartbetaling"  # logical indexing for rows containing "Kaartbetaling"
-    YukiDF$Naam_tegenrekening[kaartbetaling_rows] <- paste(
+  YukiDF$Naam_tegenrekening[kaartbetaling_rows] <- paste(
     sapply(strsplit(YukiDF$Omschrijving[kaartbetaling_rows], " "), '[', 9),
     sapply(strsplit(YukiDF$Omschrijving[kaartbetaling_rows], " "), '[', 10)
   )
@@ -205,7 +205,7 @@ if (DType =="BNP") {
   YukiDF$Omschrijving<-gsub("BETALING MET DEBETKAART NUMMER 4871 04XX XXXX 7729","BETALING MET KAART Nr 4871 xx 7729 (Arco)",YukiDF$Omschrijving)
   YukiDF$Omschrijving<-gsub("BETALING MET DEBETKAART NUMMER 4871 04XX XXXX 9449","BETALING MET KAART Nr 4871 xx 9449 (Luis)",YukiDF$Omschrijving)
   
-  }
+}
 if (DType =="REV") {
   REVRaw<-read.csv(ifile, header= TRUE, sep = c(",",";"), quote = "", dec = ".",stringsAsFactors = FALSE)
   NROF_Rawrecords <- nrow(REVRaw)
@@ -254,7 +254,7 @@ if (DType =="REV") {
     View(FeeDF)
     message("Fee Split in seperate Records: ",FeeRecords, " Fee Amount:  ",sum(FeeDF$Bedrag))
     YukiDF<-rbind(YukiDF,FeeDF)
-    } #Split fee to separate records
+  } #Split fee to separate records
 } 
 if (DType =="JUB") {
   JUBRaw <-read.csv(ifile, header= TRUE, sep = ",",  dec = ".", stringsAsFactors = FALSE, quote = "\"")
@@ -270,7 +270,7 @@ if (DType =="JUB") {
   JUBRaw$Debit<-as.numeric(gsub("\'","", JUBRaw$Debit, ignore.case = TRUE))
   JUBRaw$Credit<-as.numeric(gsub("\'","", JUBRaw$Credit, ignore.case = TRUE))
   JUBRaw$Balance<-as.numeric(gsub("\'","", JUBRaw$Balance, ignore.case = TRUE))
-
+  
   View(JUBRaw)
   # Create empty data frame
   YukiDF <- CreateYukiDF(NROF_Rawrecords) # Create empty data frame
@@ -316,11 +316,11 @@ if (DType =="SAX") {
   SaxoCur <- SaxoRaw$Instrumentvaluta[grep("1", SaxoRaw$Omrekeningskoers)][1]
   if (is.na(SaxoCur)) {
     stop("no currency found [line300]")
-    }
+  }
   switch (SaxoCur,
           "EUR" = YukiDF$IBAN <- "NL50BICK0253616360",      # Saxo works with customer ID 13782606 and Account : 69900/3616360EUR and IBAN
           "USD" = YukiDF$IBAN <- "NL90BICK3616360424",
-          )
+  )
   YukiDF$Valuta<- SaxoCur
   YukiDF$Afschrift <- format(as.Date(SaxoRaw$Transactiedatum, "%d-%b-%Y"),format ="%Y%m")     # Afschrift (statement) equals yyyymm
   YukiDF$Rentedatum<- format(as.Date(SaxoRaw$Valutadatum, "%d-%b-%Y"),format ="%d-%m-%Y")
@@ -338,11 +338,11 @@ if (DType =="SAX") {
     )
   DividendRecords<-grep("Dividend",YukiDF$Omschrijving)
   YukiDF$Omschrijving[DividendRecords] <- paste(YukiDF$Omschrijving[DividendRecords], 
-                                               "Ingehouden dividendbelasting 15%:", 
-                                               as.character(round(SaxoRaw$Boekingsbedrag[DividendRecords] /0.85 * 0.15, 2))
-                                               )
+                                                "Ingehouden dividendbelasting 15%:", 
+                                                as.character(round(SaxoRaw$Boekingsbedrag[DividendRecords] /0.85 * 0.15, 2))
+  )
   YukiDF$Omschrijving[grep("Service fee",YukiDF$Omschrijving)]<- paste(YukiDF$Omschrijving[grep("Service fee",YukiDF$Omschrijving)], "Green 0,08% * Portefeuille /12")
-
+  
   YukiDF$Bedrag<- SaxoRaw$Boekingsbedrag # before 2022 SaxoRaw$Aantal
 }
 # ==== Post processing and Write output file ====
